@@ -4,7 +4,7 @@
 ░█▄▄▀ █▀▀ █▀▄ █▄▄█ █▀▀ ░█▄▄█ █▀▀ █▄▄▀ █░░█ 
 ░█░░█ ▀▀▀ ▀░▀ ▀░░▀ ▀▀▀ ░█░░░ ▀▀▀ ▀░░▀ ▀░░▀
   </pre>
-  <h3 style="color: #6a6a6a; margin-top: -10px;">> System Initialized <</h3>
+  <h3 style="color: #6a6a6a; margin-top: -10px;">> MnemoMind <</h3>
 </div>
 
 ## Run Locally
