@@ -6,11 +6,11 @@
   </pre>
   <h3 style="color: #6a6a6a; margin-top: -10px;">> MnemoMind <</h3>
 </div>
-
+<div align="center">
   <code style="color: #00ffaa; font-size: 1.5em; display: block;">
     > It's a Mind with a Custom Memory<span style="color: #ffffff;">[Elastic Cloud or a Folder on PC or Google search]</span>
   </code>
-
+</div>
 
 
 
