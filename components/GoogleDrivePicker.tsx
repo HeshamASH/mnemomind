@@ -22,7 +22,11 @@ const GoogleDrivePicker: React.FC<GoogleDrivePickerProps> = ({ onConnect, onClos
         const data = await response.json();
         setFiles(data);
       } catch (err) {
-        setError(err.message);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('An unknown error occurred');
+        }
       }
     };
 

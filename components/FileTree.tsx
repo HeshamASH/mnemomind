@@ -3,7 +3,7 @@
     // Using react-icons for potentially better consistency
     import {
         FaFilePdf, FaFileCode, FaFileAlt, FaFileImage, FaPython,
-        FaJs, FaHtml5, FaCss3, FaJson, FaMarkdown, FaFolder, FaFolderOpen
+        FaJs, FaHtml5, FaCss3, FaMarkdown, FaFolder, FaFolderOpen
     } from 'react-icons/fa';
     import { IoChevronForward } from "react-icons/io5"; // Using a different chevron
 
@@ -30,7 +30,7 @@
             case 'py': return <FaPython className={`${iconClass} text-sky-600`} />; // Adjusted color
             case 'html': return <FaHtml5 className={`${iconClass} text-orange-500`} />;
             case 'css': case 'scss': case 'less': case 'sass': return <FaCss3 className={`${iconClass} text-blue-400`} />;
-            case 'json': return <FaJson className={`${iconClass} text-yellow-600`} />;
+            case 'json': return <FaFileCode className={`${iconClass} text-yellow-600`} />;
             case 'md': return <FaMarkdown className={`${iconClass} text-gray-400`} />;
             case 'pdf': return <FaFilePdf className={`${iconClass} text-red-500`} />;
             case 'png': case 'jpg': case 'jpeg': case 'gif': case 'svg': case 'webp': return <FaFileImage className={`${iconClass} text-purple-500`} />;
@@ -73,7 +73,7 @@
         let accumulatedPath = '';
         const pathParts = parentPath.split('/').filter(p => p && p !== '.'); // Filter empty parts and '.'
 
-        pathParts.forEach((part, index) => {
+        pathParts.forEach((part) => {
             accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
             let childNode = treeMap.get(accumulatedPath);
             if (!childNode) {

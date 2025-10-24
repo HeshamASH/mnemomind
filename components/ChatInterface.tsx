@@ -1,7 +1,7 @@
     import React, { useState, useRef, useEffect, useCallback } from 'react';
     import {
-        ChatMessage, Source, ModelId, DataSource, Attachment, MessageRole,
-        GroundingOptions, ElasticResult, Chat, GroundingChunk // Added ElasticResult, Chat, GroundingChunk
+        ChatMessage, Source, ModelId, Attachment, MessageRole,
+        GroundingOptions, ElasticResult, Chat // Added ElasticResult, Chat
     } from '../types';
     import Message from './Message';
     import ModelSwitcher from './ModelSwitcher';

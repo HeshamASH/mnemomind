@@ -79,8 +79,6 @@ const App: React.FC = () => {
 
   // --- Derived State ---
   const activeChat = chats.find(c => c.id === activeChatId);
-  // Optional chaining is important here as activeChat might be undefined initially
-  const groundingOptions = activeChat?.groundingOptions;
 
 
   // --- Callbacks for State Updates ---
@@ -523,36 +521,47 @@ const App: React.FC = () => {
                 [], // Empty context for API grounding
                 modelToUse,
                 currentGroundingOptions, // Pass the enabled options
-                location
             );
 
             let accumulatedContent = '';
             let allGroundingAttributions: any[] = []; // Store raw attributions
 
-            for await (const chunk of responseStream) {
-                 const chunkText = typeof chunk.text === 'function' ? await chunk.text() : ''; // Await if it's a function
+            for await (const chunk of responseStream.stream) {
+                 const chunkText = chunk.text;
                  accumulatedContent += chunkText;
                  updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
 
-                // Safely access groundingMetadata and attributions
-                const newAttributions = chunk.candidates?.[0]?.groundingMetadata?.groundingAttributions;
-                if (newAttributions) {
+                // Safely access grounding/citation metadata and attributions
+                const candidateAny = (chunk as any)?.candidates?.[0];
+                const newAttributions =
+                    candidateAny?.groundingMetadata?.groundingChunks ||
+                    candidateAny?.citationMetadata?.citations ||
+                    candidateAny?.groundingAttributions; // fallback for older/undocumented shapes
+
+                if (Array.isArray(newAttributions) && newAttributions.length > 0) {
                     allGroundingAttributions.push(...newAttributions);
                 }
             }
 
              // Process and store unique grounding chunks AFTER stream finishes
-             const uniqueAttributions = Array.from(new Map(allGroundingAttributions
-                .filter(attr => attr.web?.uri || attr.maps?.uri) // Filter only valid web/maps attributions
-                .map(attr => [attr.web?.uri || attr.maps?.uri, attr]) // Use URI as key for deduplication
+             const uniqueAttributions = Array.from(new Map(
+                allGroundingAttributions
+                  .filter((attr: any) => attr?.web?.uri || attr?.maps?.uri || attr?.uri)
+                  .map((attr: any) => [attr.web?.uri || attr.maps?.uri || attr.uri, attr]) // Use URI as key for deduplication
              ).values());
 
              // Map valid attributions to our GroundingChunk format
-             const finalGroundingChunks: GroundingChunk[] = uniqueAttributions.map(attr => ({
-                 web: attr.web ? { uri: attr.web.uri, title: attr.web.title || '' } : undefined,
+             const finalGroundingChunks: GroundingChunk[] = uniqueAttributions
+               .map((attr: any) => ({
+                 web: attr.web
+                   ? { uri: attr.web.uri, title: attr.web.title || '' }
+                   : attr.uri
+                     ? { uri: attr.uri, title: attr.title || '' }
+                     : undefined,
                  maps: attr.maps ? { uri: attr.maps.uri, title: attr.maps.title || '' } : undefined,
                  // Add other types here if needed (e.g., shopping)
-             })).filter(chunk => chunk.web || chunk.maps); // Ensure at least one type is present
+               }))
+               .filter(chunk => chunk.web || chunk.maps); // Ensure at least one type is present
 
             updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: finalGroundingChunks }));
 
@@ -587,11 +596,11 @@ const App: React.FC = () => {
             const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
             // Pass elasticResults as context, explicitly disable API grounding for this call
             const apiGroundingOptions = { ...currentGroundingOptions, useGoogleSearch: false, useGoogleMaps: false };
-            const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, apiGroundingOptions, location);
+            const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, apiGroundingOptions);
 
             let accumulatedContent = '';
-            for await (const chunk of responseStream) {
-                const chunkText = typeof chunk.text === 'function' ? await chunk.text() : ''; // Await if needed
+            for await (const chunk of responseStream.stream) {
+                const chunkText = chunk.text;
                 accumulatedContent += chunkText;
                 updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
             }
@@ -624,9 +633,9 @@ const App: React.FC = () => {
         const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
         const responseStream = await streamChitChatResponse(currentMessages, modelToUse);
         let accumulatedContent = '';
-        for await (const chunk of responseStream) {
+        for await (const chunk of responseStream.stream) {
             // Check if chunk has the text method
-            const chunkText = typeof chunk.text === 'function' ? await chunk.text() : ''; // Await if needed
+            const chunkText = chunk.text;
             accumulatedContent += chunkText;
             // Update the last message (the placeholder) incrementally
             updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
@@ -685,8 +694,8 @@ const App: React.FC = () => {
         let responseJsonText = '';
         let streamFinished = false;
         try {
-            for await (const chunk of responseStream) {
-                const chunkText = typeof chunk.text === 'function' ? await chunk.text() : ''; // Await if needed
+            for await (const chunk of responseStream.stream) {
+                const chunkText = chunk.text;
                 responseJsonText += chunkText;
             }
             streamFinished = true;
@@ -1038,27 +1047,6 @@ const App: React.FC = () => {
   }, [activeChat, updateActiveChat, addMessageToActiveChat, selectedModel, getFileContent]); // Added getFileContent
 
 
-  // Open ChunkViewerModal when a citation or source pill is clicked
-  const handleSelectChunk = useCallback((result: ElasticResult) => {
-    console.log("handleSelectChunk:", result.source.fileName);
-    setSelectedFile(null);       // Close FileViewer if open
-    setDiffViewerRecord(null);   // Close DiffViewer if open
-    setSelectedChunkResult(result); // Set the selected chunk data to open the modal
-  }, []);
-
-  // Close ChunkViewerModal
-  const handleCloseChunkViewer = useCallback(() => {
-    setSelectedChunkResult(null);
-  }, []);
-
-  // Handle click on "Show Full Document" from ChunkViewerModal
-  const handleShowFullDocumentFromChunk = useCallback((source: Source) => {
-    console.log("Request to show full document for:", source.fileName);
-    setSelectedChunkResult(null); // Close the chunk viewer
-    handleSelectFile(source);      // Open the full file viewer using existing handler
-  }, [handleSelectFile]); // Depends on handleSelectFile
-
-
   // --- Other UI Toggles ---
   // Select a file to view its full content or diff
   const handleSelectFile = useCallback(async (file: Source) => {
@@ -1093,6 +1081,27 @@ const App: React.FC = () => {
           }
       }
   }, [editedFiles, getFileContent, setDiffViewerRecord, setApiError]); // Updated dependencies
+
+
+  // Open ChunkViewerModal when a citation or source pill is clicked
+  const handleSelectChunk = useCallback((result: ElasticResult) => {
+    console.log("handleSelectChunk:", result.source.fileName);
+    setSelectedFile(null);       // Close FileViewer if open
+    setDiffViewerRecord(null);   // Close DiffViewer if open
+    setSelectedChunkResult(result); // Set the selected chunk data to open the modal
+  }, []);
+
+  // Close ChunkViewerModal
+  const handleCloseChunkViewer = useCallback(() => {
+    setSelectedChunkResult(null);
+  }, []);
+
+  // Handle click on "Show Full Document" from ChunkViewerModal
+  const handleShowFullDocumentFromChunk = useCallback((source: Source) => {
+    console.log("Request to show full document for:", source.fileName);
+    setSelectedChunkResult(null); // Close the chunk viewer
+    handleSelectFile(source);      // Open the full file viewer using existing handler
+  }, [handleSelectFile]); // Depends on handleSelectFile
 
 
   const handleToggleCodeGeneration = useCallback(() => setIsCodeGenerationEnabled(prev => !prev), []);

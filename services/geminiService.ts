@@ -1,14 +1,17 @@
-import { GoogleGenAI, Content, Part, Tool } from "@google/genai";
+import { GoogleGenerativeAI, Content, Part, Tool } from "@google/generative-ai";
 import { ElasticResult, Intent, ChatMessage, GroundingOptions } from '../types';
 
 // Updated instruction with a placeholder for dynamic replacement
 const getSystemInstruction = (hasDataSource: boolean, isGoogleSearchEnabled: boolean): string => {
-  let instructionText: string;
   if (!hasDataSource) {
-      instructionText = `You are a helpful and friendly assistant. Respond conversationally.`;
-  } else {
-      // Base instruction set
-      instructionText = `You are "MnemoMind", a world-class AI assistant for analyzing documents and code.
+    return `You are a helpful and friendly assistant. Respond conversationally.`;
+  }
+
+  const searchGuidance = isGoogleSearchEnabled
+    ? "If the provided context is insufficient, attempt to use your available tools (like Google Search) to find the answer."
+    : "If the provided context is insufficient, you MUST state clearly that you cannot answer based on the provided documents. Do not invent information or use knowledge outside the provided context.";
+
+  return `You are "MnemoMind", a world-class AI assistant for analyzing documents and code.
 
 **Your Core Task:**
 Answer the user's question based *only* on the context provided with the latest user message. If the user provides an image or file, use it as primary context.
@@ -20,13 +23,9 @@ Answer the user's question based *only* on the context provided with the latest 
     - Use bulleted (\`*\` or \`-\`) or numbered lists for itemization.
 2.  **Use Tables:** If the data is suitable for a table (e.g., comparisons, lists of items with attributes), you MUST present it in a Markdown table.
 3.  **Clarity:** Provide concise and accurate answers.
-4.  **File References & Citations:** When you use information from a source document provided in the context, you **MUST** end the sentence or statement with a citation marker, like \`[1]\`. Your citation numbers \`[1]\`, \`[2]\`, etc., **MUST correspond directly to the order of the source context items** provided to you. **DO NOT** add a separate "Sources" section listing file paths or quotes at the end of your response.
+4.  **File References & Citations:** When you use information from a source document provided in the context, you **MUST** end the sentence or statement with a citation marker, like \`[1]\`. Your citation numbers \`[1]\`, \`[2]\`, etc., **MUST correspond directly to the order of the source context items** provided to you. Citation numbers must be greater than zero. **DO NOT** use \`[0]\` as a citation. **DO NOT** add a separate "Sources" section listing file paths or quotes at the end of your response.
 5.  **Code:** Format all code examples in Markdown code blocks with the correct language identifier (e.g., \`\`\`typescript).
-6.  **Context is Key:** If the provided context is insufficient to answer and GOOGLE_SEARCH_ENABLED is 'false', you **MUST** state clearly that you cannot answer based on the provided documents. Do not invent information or use knowledge outside the provided context. If the provided context is insufficient and GOOGLE_SEARCH_ENABLED is 'true', attempt to use your available tools (like Google Search) to find the answer.`;
-  }
-
-  // Replace the placeholder dynamically
-  return instructionText.replace(/GOOGLE_SEARCH_ENABLED/g, isGoogleSearchEnabled ? "'true'" : "'false'");
+6.  **Context is Key:** ${searchGuidance}`;
 };
 
 
@@ -59,7 +58,7 @@ const buildConversationHistory = (history: ChatMessage[]): Content[] => {
 };
 
 export const classifyIntent = async (userQuery: string, model: string): Promise<Intent> => {
-    const ai = new GoogleGenAI(getApiKey()); // Pass API key during instantiation
+    const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key during instantiation
 
     const prompt = `You are an advanced intent classifier for an AI assistant that helps with documents and code. Your job is to determine the user's primary intent.
 
@@ -112,7 +111,7 @@ Assistant:`;
 };
 
 export const rewriteQuery = async (userQuery: string, model: string): Promise<string> => {
-    const ai = new GoogleGenAI(getApiKey()); // Pass API key
+    const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key
 
     const prompt = `Rewrite conversational queries into clean, keyword-focused search phrases suitable for a vector database search. Rules:
 
@@ -154,7 +153,7 @@ Rewritten Query:`;
 };
 
 export const streamChitChatResponse = async (history: ChatMessage[], model: string) => {
-    const ai = new GoogleGenAI(getApiKey()); // Pass API key
+    const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key
 
     const conversationHistory = buildConversationHistory(history);
     // Determine if any past model messages included sources (elastic or grounding chunks)
@@ -183,7 +182,7 @@ export const streamChitChatResponse = async (history: ChatMessage[], model: stri
 };
 
 export const streamCodeGenerationResponse = async (history: ChatMessage[], context: ElasticResult[], model: string) => {
-    const ai = new GoogleGenAI(getApiKey()); // Pass API key
+    const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key
 
     const conversationHistory = buildConversationHistory(history);
     const lastUserMessageContent = conversationHistory.pop(); // Remove last user message to add context below
@@ -204,7 +203,7 @@ ${result.contentSnippet.trim()}
     // Combine previous history, context, and the last user request
     const codeGenPrompt = `
 **Previous Conversation History (if any):**
-${conversationHistory.map(m => `${m.role}: ${m.parts.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
+${conversationHistory.map(m => `${m.role}: ${m.parts?.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
 
 **Relevant Context Snippets from Files:**
 ${contextString || "No specific file context was found for this request."}
@@ -215,7 +214,7 @@ ${lastUserMessageContent.parts[0].text}
 
     // Reconstruct the last message with the combined prompt
     const finalParts: Part[] = [{ text: codeGenPrompt }];
-    if (lastUserMessageContent.parts.length > 1 && lastUserMessageContent.parts[1].inlineData) {
+    if (lastUserMessageContent.parts && lastUserMessageContent.parts.length > 1 && lastUserMessageContent.parts[1].inlineData) {
       finalParts.push(lastUserMessageContent.parts[1]); // Keep attachment if present
     }
     const finalUserMessage: Content = { role: 'user', parts: finalParts };
@@ -263,10 +262,9 @@ export const streamAiResponse = async (
   history: ChatMessage[],
   context: ElasticResult[],
   model: string,
-  groundingOptions: GroundingOptions,
-  location: GeolocationPosition | null
+  groundingOptions: GroundingOptions
 ) => {
-  const ai = new GoogleGenAI(getApiKey()); // Pass API key
+  const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key
 
   const conversationHistory = buildConversationHistory(history);
   const lastUserMessageContent = conversationHistory.pop(); // Prep for adding context
@@ -289,7 +287,7 @@ ${result.contentSnippet.trim()}
   // Construct the final prompt including context
   const finalUserPromptText = `
 **Previous Conversation History (if any):**
-${conversationHistory.map(m => `${m.role}: ${m.parts.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
+${conversationHistory.map(m => `${m.role}: ${m.parts?.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
 
 **Retrieved Context for Answering the Question:**
 ${contextString || "No specific document context was retrieved for this question."}
@@ -304,7 +302,7 @@ Follow all formatting rules and citation requirements outlined in your primary s
 
   // Rebuild the last user message with the combined prompt
   const finalParts: Part[] = [{ text: finalUserPromptText }];
-  if (lastUserMessageContent.parts.length > 1 && lastUserMessageContent.parts[1].inlineData) {
+  if (lastUserMessageContent.parts && lastUserMessageContent.parts.length > 1 && lastUserMessageContent.parts[1].inlineData) {
     finalParts.push(lastUserMessageContent.parts[1]); // Keep attachment
   }
   const finalUserMessage: Content = { role: 'user', parts: finalParts };
@@ -312,7 +310,8 @@ Follow all formatting rules and citation requirements outlined in your primary s
   // Prepare tools if grounding options are enabled
   const tools: Tool[] = [];
   if (groundingOptions.useGoogleSearch) {
-      tools.push({ googleSearch: {} });
+      // Cast to Tool to satisfy SDK typings if this property isn't available in the current version
+      tools.push({ googleSearch: {} } as unknown as Tool);
   }
   if (groundingOptions.useGoogleMaps) {
       // Assuming a specific tool definition for maps exists or needs to be defined

@@ -172,7 +172,7 @@ const Message: React.FC<MessageProps> = ({
                     onExportToSheets={onExportToSheets}
                     // Pass handler and sources for clickable citations
                     onCitationClick={handleCitationClick}
-                    elasticSources={message.elasticSources}
+                    elasticSources={message.elasticSources ?? []}
                  />
               ) : (
                 // Loading indicator
@@ -215,7 +215,7 @@ const Message: React.FC<MessageProps> = ({
                key={message.editedFile.id}
                source={message.editedFile}
                // Clicking edited pill should probably open the diff viewer or full file viewer
-               onClick={() => onSelectSource(message.editedFile)}
+               onClick={() => message.editedFile && onSelectSource(message.editedFile)}
                isEdited={true}
                citationNumber={null} // No citation for edited file pill itself
              />
@@ -229,7 +229,7 @@ const Message: React.FC<MessageProps> = ({
              {hasElasticSources && (
                <div className="flex flex-wrap gap-2 items-center">
                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-1 self-center">Sources:</span>
-                 {message.elasticSources.map((result, index) => (
+                 {(message.elasticSources ?? []).map((result, index) => (
                    <SourcePill
                      key={result.source.id + '-' + index} // Use index for uniqueness if IDs aren't unique across sources
                      source={result.source}
@@ -244,9 +244,9 @@ const Message: React.FC<MessageProps> = ({
               {hasGroundingChunks && (
                  <div className="flex flex-wrap gap-2 items-center">
                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-1 self-center">
-                    {message.groundingChunks.some(c => c.maps) ? 'Web & Map Results:' : 'Web Results:'} {/* Adjust label */}
+                    {(message.groundingChunks ?? []).some(c => c.maps) ? 'Web & Map Results:' : 'Web Results:'} {/* Adjust label */}
                    </span>
-                   {message.groundingChunks.map((chunk, index) => {
+                   {(message.groundingChunks ?? []).map((chunk, index) => {
                       const source = chunk.web || chunk.maps;
                       if (!source?.uri) return null; // Skip if no URI
                       const title = source.title || (source.uri ? new URL(source.uri).hostname.replace('www.', '') : 'External Source');

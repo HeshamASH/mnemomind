@@ -19,7 +19,9 @@ export enum ResponseType {
   CHIT_CHAT = 'Chit-Chat',
   GOOGLE_SEARCH = 'Web Search', // For web grounding results
   GOOGLE_MAPS = 'Maps Search',   // For maps grounding results
-  ERROR = 'Error'
+  ERROR = 'Error',
+  CODE_APPLIED = 'Code Applied',
+  INFO = 'Info'
 }
 
 export enum ModelId {
@@ -107,6 +109,7 @@ export interface Attachment {
 
 // Represents a single message in the chat history
 export interface ChatMessage {
+  id?: string; // Optional unique ID for React keys
   role: MessageRole;
   content: string; // The text content of the message
   attachment?: Attachment; // Optional user attachment
@@ -160,3 +163,8 @@ export interface ElasticResult {
   score: number; // Relevance score from the search
 }
 
+export interface EditedFileRecord {
+  file: Source;
+  originalContent: string;
+  currentContent: string;
+}

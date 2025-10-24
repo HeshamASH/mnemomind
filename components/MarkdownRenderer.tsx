@@ -16,13 +16,7 @@ interface MarkdownRendererProps {
   elasticSources?: ElasticResult[];
 }
 
-// --- Icons ---
-// File Icon (for file: mentions)
-const FileIcon: React.FC<{className?: string}> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 inline-block align-text-bottom ${className || ''}`}>
-        <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h6.89a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .439 1.061v5.758A1.5 1.5 0 0 1 12.5 13H3.5A1.5 1.5 0 0 1 2 11.5v-8Z" />
-    </svg>
-);
+
 // Copy Icon (for table export button)
 const CopyIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -121,7 +115,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 // This approach is okay but could be fragile. Consider a more robust parser if needed.
                 container.innerHTML = container.innerHTML.replace(
                      /`file:([^`]+)`/g, // Matches `file:anything_not_backtick`
-                     (match, fileName) => // Use function for safer replacement
+                     (_, fileName) => // Use function for safer replacement
                          `<span class="inline-flex items-center font-mono text-sm text-cyan-700 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/50 px-1.5 py-0.5 rounded-md whitespace-nowrap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 inline-block mr-1 align-text-bottom flex-shrink-0"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h6.89a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .439 1.061v5.758A1.5 1.5 0 0 1 12.5 13H3.5A1.5 1.5 0 0 1 2 11.5v-8Z" /></svg><span class="truncate">${fileName}</span></span>`
                  );
 
