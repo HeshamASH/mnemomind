@@ -11,7 +11,7 @@
     > It's a Mind with a Custom Memory<span style="color: #ffffff;">[Elastic Cloud or a Folder on PC or Google search]</span>
   </code>
 
-</div>
+
 
 
 ## Run Locally
