@@ -45,8 +45,8 @@ MnemoMind is an intelligent, conversational AI assistant designed to interact wi
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [<your-repository-url>](https://github.com/HeshamASH/mnemomind)
-    cd mnemomind-main
+    git clone https://github.com/HeshamASH/mnemomind
+    cd mnemomind
     ```
 
 2.  **Frontend Setup:**
