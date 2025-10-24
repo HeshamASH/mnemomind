@@ -1,6 +1,6 @@
 <div align="center" style="background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%); padding: 30px; border-radius: 10px; color: white;">
-  <h1 style="margin: 0; font-size: 3em; font-weight: 700;">// Your Profile Title Here</h1>
-  <p style="margin: 5px 0 0; font-size: 1.2em;">&lt;developer &lt;maker&gt; &lt;explorer/&gt; /&gt;</p>
+  <h1 style="margin: 0; font-size: 3em; font-weight: 700;">// MnemoMind</h1>
+  <p style="margin: 5px 0 0; font-size: 1.2em;">&lt;Custom Memory &lt;maker&gt; &lt;explorer/&gt; /&gt;</p>
 </div>
 
 ## Run Locally
