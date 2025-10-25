@@ -1,3 +1,8 @@
+type GoogleSearchTool = {
+  googleSearch: {};
+};
+
+// Updated import to include Tool and FunctionDeclarationsTool
 import { GoogleGenerativeAI, Content, Part, Tool, GenerateContentResponse, FunctionDeclarationsTool } from "@google/generative-ai";
 import { ElasticResult, Intent, ChatMessage, GroundingOptions, GeolocationPosition } from '../types'; // Added GeolocationPosition
 
@@ -322,10 +327,10 @@ Follow all formatting rules and citation requirements outlined in your primary s
   // Prepare tools if grounding options are enabled
   // --- IMPORTANT: Adjust Tool typing based on your installed @google/generative-ai version ---
   // The exact types (Tool, GoogleSearchTool, FunctionDeclarationTool) might vary slightly.
-  const tools: Tool[] = [];
+  const tools: (FunctionDeclarationsTool | GoogleSearchTool)[] = [];
   if (groundingOptions.useGoogleSearch) {
     // Correct way to specify the Google Search tool
-    const googleSearchTool: Tool = { googleSearch: {} };
+    const googleSearchTool: GoogleSearchTool = { googleSearch: {} };
     tools.push(googleSearchTool);
   }
 
