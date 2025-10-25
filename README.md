@@ -5,7 +5,7 @@
 █ ▀ █ █ ▀█ █▀  █ ▀ █ █ █ █ ▀ █ █ █ ▀█ █ █
 ▀   ▀ ▀  ▀ ▀▀▀ ▀   ▀ ▀▀▀ ▀   ▀ ▀ ▀  ▀ ▀▀ 
   </pre>
-  <h3 style="color: #6a6a6a; margin-top: -10px;">> It is Mind with a custom memory <</h3>
+  <h3 style="color: #6a6a6a; margin-top: -10px;">> It’s Mind with a custom memory <</h3>
 </div>
 
 # MnemoMind: AI Assistant with Custom Memory
