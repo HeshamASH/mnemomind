@@ -1,5 +1,17 @@
+<<<<<<< Updated upstream
 import { GoogleGenerativeAI, Content, Part, Tool } from "@google/generative-ai";
 import { ElasticResult, Intent, ChatMessage, GroundingOptions } from '../types';
+=======
+// Import Google Generative AI SDK types and classes
+import { GoogleGenerativeAI, Content, Part, Tool, GenerateContentResponse } from "@google/generative-ai";
+import { ElasticResult, Intent, ChatMessage, GroundingOptions, GeolocationPosition } from '../types';
+
+// Function to safely get text from a stream chunk
+const getTextFromChunk = (chunk: GenerateContentResponse): string => {
+    // Check candidates, content, parts, and text existence safely
+    return chunk?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+};
+>>>>>>> Stashed changes
 
 // Updated instruction with a placeholder for dynamic replacement
 const getSystemInstruction = (hasDataSource: boolean, isGoogleSearchEnabled: boolean): string => {
@@ -203,7 +215,7 @@ ${result.contentSnippet.trim()}
     // Combine previous history, context, and the last user request
     const codeGenPrompt = `
 **Previous Conversation History (if any):**
-${conversationHistory.map(m => `${m.role}: ${m.parts?.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
+${conversationHistory.map(m => `${m.role}: ${(m.parts ?? []).map((p: Part) => p.text || '[attachment]').join(' ')}`).join('\n')}
 
 **Relevant Context Snippets from Files:**
 ${contextString || "No specific file context was found for this request."}
@@ -287,7 +299,7 @@ ${result.contentSnippet.trim()}
   // Construct the final prompt including context
   const finalUserPromptText = `
 **Previous Conversation History (if any):**
-${conversationHistory.map(m => `${m.role}: ${m.parts?.map(p => p.text || '[attachment]').join(' ')}`).join('\n')}
+${conversationHistory.map(m => `${m.role}: ${(m.parts ?? []).map((p: Part) => p.text || '[attachment]').join(' ')}`).join('\n')}
 
 **Retrieved Context for Answering the Question:**
 ${contextString || "No specific document context was retrieved for this question."}
@@ -308,10 +320,20 @@ Follow all formatting rules and citation requirements outlined in your primary s
   const finalUserMessage: Content = { role: 'user', parts: finalParts };
 
   // Prepare tools if grounding options are enabled
+<<<<<<< Updated upstream
   const tools: Tool[] = [];
   if (groundingOptions.useGoogleSearch) {
       // Cast to Tool to satisfy SDK typings if this property isn't available in the current version
       tools.push({ googleSearch: {} } as unknown as Tool);
+=======
+  // --- IMPORTANT: Adjust Tool typing based on your installed @google/generative-ai version ---
+  // The exact types (Tool, GoogleSearchTool, FunctionDeclarationTool) might vary slightly.
+  const tools: Tool[] = [];
+  if (groundingOptions.useGoogleSearch) {
+    // Enable Google Search tool
+    const googleSearchTool: Tool = { googleSearch: {} };
+    tools.push(googleSearchTool);
+>>>>>>> Stashed changes
   }
   if (groundingOptions.useGoogleMaps) {
       // Assuming a specific tool definition for maps exists or needs to be defined
