@@ -176,6 +176,7 @@ const Message: React.FC<MessageProps> = ({ message, messageIndex, onSelectSource
               result={{ source: message.editedFile, contentSnippet: '', score: 0 }} 
               onClick={() => onSelectSource(message.editedFile)}
               isEdited={true} 
+              chunkIndex={0} 
             />
           </div>
         )}

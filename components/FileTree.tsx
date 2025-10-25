@@ -64,7 +64,7 @@ interface TreeNode {
 
 let nodeId = 0;
 const buildFileTree = (files: Source[]): TreeNode[] => {
-  const root: TreeNode = { name: 'root', type: 'folder', path: '', children: [] };
+  const root: TreeNode = { id: 'root', name: 'root', type: 'folder', path: '', children: [] };
 
   files.forEach(file => {
     const pathParts = file.path ? file.path.split('/').filter(p => p) : [];
