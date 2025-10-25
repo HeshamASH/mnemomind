@@ -224,7 +224,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
             ))}
              {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
                 <ErrorBoundary>
-                  <Message message={{role: MessageRole.MODEL, content: ''}} onSelectSource={()=>{}} onSuggestionAction={()=>{}} onExportToSheets={onExportToSheets} />
+                  <Message message={{role: MessageRole.MODEL, content: ''}} messageIndex={messages.length} onSelectSource={()=>{}} onSuggestionAction={()=>{}} onExportToSheets={onExportToSheets} />
                 </ErrorBoundary>
             )}
           </div>

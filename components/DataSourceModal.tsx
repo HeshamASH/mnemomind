@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { DataSource } from '../types';
+import { DataSource, DriveFile } from '../types';
 
 import GoogleDrivePicker from './GoogleDrivePicker';
 

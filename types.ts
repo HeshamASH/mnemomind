@@ -38,6 +38,7 @@ export enum ResponseType {
   RAG = 'RAG',
   CODE_GENERATION = 'Code Generation',
   CHIT_CHAT = 'Chit-Chat',
+  GOOGLE_SEARCH = 'Google Search',
 }
 
 export enum ModelId {
@@ -125,4 +126,11 @@ export interface ElasticResult {
   source: Source;
   contentSnippet: string;
   score: number;
+}
+
+export interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime: string;
 }

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Source } from '../types';
-import { FaFilePdf, FaFileCode, FaFileAlt, FaFileImage, FaPython, FaJs, FaHtml5, FaCss3, FaJson, FaMarkdown } from 'react-icons/fa';
+import { FaFilePdf, FaFileCode, FaFileAlt, FaFileImage, FaPython, FaJs, FaHtml5, FaCss3, FaMarkdown } from 'react-icons/fa';
 
 // --- Icons ---
 
@@ -74,6 +74,7 @@ const buildFileTree = (files: Source[]): TreeNode[] => {
       let childNode = currentNode.children.find(child => child.name === part && child.type === 'folder');
       if (!childNode) {
         childNode = { 
+          id: `node-${nodeId++}`,
           name: part,
           type: 'folder',
           path: currentNode.path ? `${currentNode.path}/${part}` : part,
@@ -85,6 +86,7 @@ const buildFileTree = (files: Source[]): TreeNode[] => {
     });
 
     currentNode.children.push({
+      id: `node-${nodeId++}`,
       name: file.file_name,
       type: 'file',
       path: file.path ? `${file.path}/${file.file_name}` : file.file_name,

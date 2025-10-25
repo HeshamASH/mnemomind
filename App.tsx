@@ -174,7 +174,7 @@ const App: React.FC = () => {
       }
 
       // Start with preloaded files if the option is active
-      const preloadedFiles = groundingOptions.usePreloaded
+      let preloadedFiles = groundingOptions.usePreloaded
         ? getAllPreloadedFiles(activeChat.dataset)
         : [];
 

@@ -173,7 +173,7 @@ const Message: React.FC<MessageProps> = ({ message, messageIndex, onSelectSource
             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2 self-center">Edited File:</span>
             <SourcePill 
               key={message.editedFile.id} 
-              source={message.editedFile} 
+              result={{ source: message.editedFile, contentSnippet: '', score: 0 }} 
               onClick={() => onSelectSource(message.editedFile)}
               isEdited={true} 
             />

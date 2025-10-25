@@ -1,5 +1,5 @@
 import React from 'react';
-import { Source } from '../types';
+import { Source, ElasticResult } from '../types';
 
 interface SourcePillProps {
   result: ElasticResult;
