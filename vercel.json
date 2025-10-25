@@ -5,24 +5,7 @@
     "api/main.py": {
       "runtime": "@vercel/python@5.0.10",
       "maxDuration": 30,
-      "excludeFiles": [
-        "node_modules/**",
-        "dist/**",
-        "__pycache__/**",
-        "*.pyc",
-        "requirements.txt",
-        ".env*",
-        ".git/**",
-        "fixed_documents/**",
-        "*.md",
-        ".cache/**",
-        "/tmp/**",
-        "/vercel/.cache/**",
-        ".venv/**",
-        "**/site-packages/torch/**",
-        "**/site-packages/transformers/**",
-        "**/sentence_transformers/models/**"
-      ]
+      "excludeFiles": "{node_modules/**,dist/**,__pycache__/**,*.pyc,requirements.txt,.env*,.git/**,fixed_documents/**,*.md,.cache/**,/tmp/**,/vercel/.cache/**,.venv/**,**/site-packages/torch/**,**/site-packages/transformers/**,**/sentence_transformers/models/**}"
     }
   },
   "routes": [
@@ -40,4 +23,5 @@
   ],
   "outputDirectory": "dist"
 }
+
 
