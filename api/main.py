@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
-from sentence_transformers import SentenceTransformer # Added import
+from fastembed import TextEmbedding
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
 
 # Configure logging
@@ -66,10 +66,10 @@ class Source(BaseModel):
 # --- Embedding Model ---
 try:
     # Load the sentence transformer model upon startup
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    logging.info("Sentence Transformer model loaded successfully.")
+    embedding_model = TextEmbedding(model_name="BAAI/bge-base-en")
+    logging.info("FastEmbed model loaded successfully.")
 except Exception as e:
-    logging.error(f"Failed to load Sentence Transformer model: {e}", exc_info=True)
+    logging.error(f"Failed to load FastEmbed model: {e}", exc_info=True)
     # Depending on your app's requirements, you might want to raise an error here
     # raise RuntimeError(f"Failed to load Sentence Transformer model: {e}")
     embedding_model = None # Set to None if loading fails
@@ -280,7 +280,8 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
     try:
         query_text = query_body.query
         logging.info(f"Received search query: '{query_text}'")
-        query_vector = embedding_model.encode(query_text).tolist()
+        query_vector = list(embedding_model.embed([query_text]))[0].tolist()
+
 
         search_body = {
             "knn": {

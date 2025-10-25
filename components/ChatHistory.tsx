@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Chat, DataSource, Source } from '../types';
 import FileTree from './FileTree';
 

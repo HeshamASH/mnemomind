@@ -565,13 +565,19 @@ const App: React.FC = () => {
 
             updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: finalGroundingChunks }));
 
-        } catch (groundingError) {
-             console.error("Error during Gemini grounding fallback:", groundingError);
-             updateLastMessageInActiveChat(msg => ({
-                ...msg,
-                content: `Sorry, I couldn't find information in the documents and encountered an error searching externally: ${groundingError instanceof Error ? groundingError.message : 'Unknown error'}`,
-                responseType: ResponseType.ERROR
-             }));
+        } catch (groundingError: unknown) {
+            console.error("Error during Gemini grounding fallback:", groundingError);
+            let errorMsg = "Sorry, I couldn't find information in the documents and an external search failed. Please try again.";
+            if (typeof groundingError === 'object' && groundingError !== null && 'constructor' in groundingError && typeof (groundingError as any).constructor.name === 'string' && (groundingError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+                errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
+            } else if (groundingError instanceof Error) {
+                errorMsg = `An error occurred during the external search: ${groundingError.message}`;
+            }
+            updateLastMessageInActiveChat(msg => ({
+               ...msg,
+               content: errorMsg,
+               responseType: ResponseType.ERROR
+            }));
         }
         return; // Stop processing after grounding fallback
     }
@@ -607,11 +613,17 @@ const App: React.FC = () => {
             // Optional: Final update in case the stream closes before the last chunk renders
             updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
 
-        } catch (ragError) {
+        } catch (ragError: unknown) {
             console.error("Error during RAG generation:", ragError);
+            let errorMsg = "Sorry, I found relevant documents but couldn't generate an answer. Please try again.";
+            if (typeof ragError === 'object' && ragError !== null && 'constructor' in ragError && typeof (ragError as any).constructor.name === 'string' && (ragError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+                errorMsg = "I'm sorry, but I can't provide a response based on the provided documents. The request was blocked by the safety filter. Please try a different query.";
+            } else if (ragError instanceof Error) {
+                errorMsg = `An error occurred during answer generation: ${ragError.message}`;
+            }
             updateLastMessageInActiveChat(msg => ({
                ...msg,
-               content: `Sorry, I found relevant documents but encountered an error generating the answer: ${ragError instanceof Error ? ragError.message : 'Unknown error'}`,
+               content: errorMsg,
                responseType: ResponseType.ERROR
             }));
         }
@@ -642,13 +654,19 @@ const App: React.FC = () => {
         }
         // Optional final update, might be redundant
         // updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('ChitChat Error:', error);
-        const errorMsg = error instanceof Error ? error.message : "Failed to get response.";
-        // Update the placeholder message with the error
+        let errorMsg = "Sorry, I couldn't get a response. Please try again.";
+        // Check if the error is a GoogleGenerativeAIResponseError, which indicates a blocked response
+        if (typeof error === 'object' && error !== null && 'constructor' in error && typeof (error as any).constructor.name === 'string' && (error as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+            errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
+        } else if (error instanceof Error) {
+            errorMsg = `An error occurred: ${error.message}`;
+        }
+        // Update the placeholder message with the appropriate error
         updateLastMessageInActiveChat(msg => ({
             ...msg,
-            content: `Sorry, an error occurred: ${errorMsg}`,
+            content: errorMsg,
             responseType: ResponseType.ERROR // Mark as error
         }));
     }
@@ -699,9 +717,15 @@ const App: React.FC = () => {
                 responseJsonText += chunkText;
             }
             streamFinished = true;
-        } catch (streamError) {
+        } catch (streamError: unknown) {
              console.error("Error reading code generation stream:", streamError);
-             updateLastMessageInActiveChat(msg => ({ ...msg, content: `Error receiving code suggestion: ${streamError instanceof Error ? streamError.message : 'Unknown stream error'}`}));
+             let errorMsg = "An error occurred while receiving the code suggestion. Please try again.";
+             if (typeof streamError === 'object' && streamError !== null && 'constructor' in streamError && typeof (streamError as any).constructor.name === 'string' && (streamError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+                 errorMsg = "I'm sorry, but I can't generate a code suggestion for that. The request was blocked by the safety filter. Please try rephrasing your request.";
+             } else if (streamError instanceof Error) {
+                 errorMsg = `An error occurred while generating the code: ${streamError.message}`;
+             }
+             updateLastMessageInActiveChat(msg => ({ ...msg, content: errorMsg, responseType: ResponseType.ERROR }));
              return; // Stop processing if stream fails
         }
 

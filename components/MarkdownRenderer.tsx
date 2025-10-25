@@ -215,8 +215,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                                      fragment.appendChild(document.createTextNode(textContent.substring(lastIndex, offset)));
                                  }
 
-                                 // Check if citation index is valid
-                                 if (index >= 0 && index < elasticSources.length) {
+                                 // Check if citation number is valid (must be 1 or greater)
+                                 if (citationNum > 0 && index < elasticSources.length) {
                                      const button = document.createElement('button');
                                      button.textContent = fullMatch;
                                      // Improved styling for visibility and interaction
