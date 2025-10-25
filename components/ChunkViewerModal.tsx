@@ -35,8 +35,8 @@ const ChunkViewerModal: React.FC<ChunkViewerModalProps> = ({ result, onClose, on
         <header className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700/50 flex-shrink-0">
           <div className="overflow-hidden mr-4">
              <h3 className="font-semibold text-base text-slate-700 dark:text-slate-300">Cited Chunk From:</h3>
-            <p className="text-sm text-cyan-600 dark:text-cyan-400 font-mono truncate" title={result.source.path ? `${result.source.path}/${result.source.fileName}` : result.source.fileName}>
-                {result.source.fileName}
+            <p className="text-sm text-cyan-600 dark:text-cyan-400 font-mono truncate" title={result.source.path ? `${result.source.path}/${result.source.file_name}` : result.source.file_name}>
+                {result.source.file_name}
             </p>
              {/* Display Relevance Score */}
              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
