@@ -85,10 +85,11 @@ interface ChatInterfaceProps {
   groundingOptions?: GroundingOptions;
   onGroundingOptionsChange: (options: GroundingOptions) => void;
   apiError: string | null;
+  setApiError: (error: string | null) => void;
   cloudSearchError: string | null;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, cloudSearchError }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, setApiError, cloudSearchError }) => {
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -102,9 +103,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
 
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+
 
   const handleResizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -220,7 +219,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
           <div className="space-y-6">
             {messages.map((msg, index) => (
               <ErrorBoundary key={index}>
-                <Message message={msg} onSelectSource={onSelectSource} onSuggestionAction={(action) => onSuggestionAction(index, action)} onExportToSheets={onExportToSheets} />
+                <Message message={msg} messageIndex={index} onSelectSource={onSelectSource} onSuggestionAction={(action) => onSuggestionAction(index, action)} onExportToSheets={onExportToSheets} />
               </ErrorBoundary>
             ))}
              {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
@@ -236,8 +235,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
       <div className="px-6 py-4 bg-white dark:bg-slate-900">
         <div className="w-full max-w-4xl mx-auto">
             {apiError && (
-                <div className="p-3 mb-3 bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm font-semibold" role="alert">
+                <div className="relative p-3 mb-3 bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm font-semibold" role="alert">
                     {apiError}
+                    <button onClick={() => setApiError(null)} className="absolute top-1 right-1 p-1.5 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 rounded-full">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"></path></svg>
+                    </button>
                 </div>
             )}
             <div className="relative p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">

@@ -133,7 +133,7 @@ export const streamCodeGenerationResponse = async (history: ChatMessage[], conte
 
     const contextString = context.map(result => `
 ---
-File: ${result.source.path}/${result.source.fileName}
+File: ${result.source.path}/${result.source.file_name}
 Content:
 \`\`\`
 ${result.contentSnippet.trim()}
@@ -209,7 +209,7 @@ export const streamAiResponse = async (
 
   const contextString = context.map(result => `
 ---
-File: ${result.source.path}/${result.source.fileName}
+File: ${result.source.path}/${result.source.file_name}
 Relevance Score: ${result.score}
 
 \`\`\`

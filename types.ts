@@ -74,7 +74,7 @@ export const MODELS: ModelDefinition[] = [
 
 export interface Source {
   id: string;
-  fileName: string;
+  file_name: string;
   path: string;
 }
 
@@ -97,7 +97,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   attachment?: Attachment;
-  sources?: Source[];
+  sources?: ElasticResult[];
   suggestion?: CodeSuggestion;
   editedFile?: Source;
   responseType?: ResponseType;

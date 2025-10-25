@@ -38,7 +38,7 @@ class SearchQuery(BaseModel):
 
 class Source(BaseModel):
     id: str
-    fileName: str
+    file_name: str
     path: str
 
 @app.get("/api/auth/google")
@@ -193,7 +193,7 @@ async def search_documents(query: SearchQuery):
                 "k": 10,
                 "num_candidates": 100
             },
-            "_source": ["fileName", "path", "chunk_text"],
+            "_source": ["file_name", "path", "chunk_text"],
             "highlight": {
                 "fields": { "chunk_text": {} },
                 "fragment_size": 150,
@@ -215,7 +215,7 @@ async def search_documents(query: SearchQuery):
                 results.append({
                     "source": {
                         "id": hit["_id"],
-                        "fileName": hit["_source"].get("fileName", ""),
+                        "file_name": hit["_source"].get("file_name", ""),
                         "path": hit["_source"].get("path", "")
                     },
                     "contentSnippet": content_snippet,
@@ -241,13 +241,13 @@ async def get_all_files():
             body={
                 "size": 1000,
                 "query": { "match_all": {} },
-                "_source": ["fileName", "path"]
+                "_source": ["file_name", "path"]
             }
         )
         results = [
             {
                 "id": hit["_id"],
-                "fileName": hit["_source"].get("fileName", ""),
+                "file_name": hit["_source"].get("file_name", ""),
                 "path": hit["_source"].get("path", "")
             }
             for hit in response["hits"]["hits"]

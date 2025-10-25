@@ -189,10 +189,16 @@ const App: React.FC = () => {
       try {
         setCloudSearchError(null); // Reset error before the attempt
         const cloudFiles = await getAllCloudFiles();
-        const combined = [...cloudFiles, ...preloadedFiles];
-        const uniqueFiles = Array.from(new Map(combined.map(file => [file.id, file])).values());
-        setAllFiles(uniqueFiles);
-      } catch (error) {
+              // Filter out preloaded files that are already present in cloudFiles (by name and path)
+              preloadedFiles = preloadedFiles.filter(preloadedFile =>
+                !cloudFiles.some(cloudFile =>
+                  cloudFile.file_name === preloadedFile.file_name && cloudFile.path === preloadedFile.path
+                )
+              );
+        
+              const combined = [...cloudFiles, ...preloadedFiles];
+              const uniqueFiles = Array.from(new Map(combined.map(file => [file.id, file])).values());
+              setAllFiles(uniqueFiles);      } catch (error) {
         console.error("Error fetching cloud files:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to fetch cloud files.";
         setCloudSearchError(errorMessage);
@@ -272,7 +278,7 @@ const App: React.FC = () => {
           return data.content;
         } catch (error) {
           setApiError(error instanceof Error ? error.message : 'Could not load file content.');
-          return `Error: Could not load content for ${source.fileName}.`;
+return `Error: Could not load content for ${source.file_name}.`;
         }
       }
 
@@ -285,7 +291,7 @@ const App: React.FC = () => {
         return await getCloudFileContent(source);
       } catch (error) {
         setApiError(error instanceof Error ? error.message : 'Could not load file content.');
-        return `Error: Could not load content for ${source.fileName}.`;
+        return `Error: Could not load content for ${source.file_name}.`;
       }
   };
 
@@ -304,16 +310,19 @@ const App: React.FC = () => {
     });
 
     const latestQuery = currentMessages[currentMessages.length - 1];
-    const { useCloud, usePreloaded } = activeChat.groundingOptions;
-    
+
+
+    const { useCloud, usePreloaded, useGoogleSearch, useGoogleMaps } = activeChat.groundingOptions;
+
     let elasticResults: ElasticResult[] = [];
     if (useCloud || usePreloaded) {
       elasticResults = await searchElastic(latestQuery.content);
       console.log("elasticResults", elasticResults);
     }
 
-    if (elasticResults.length === 0 && activeChat.groundingOptions.useGoogleSearch) {
-        console.log("No results from Elasticsearch, falling back to Google Search");
+    // If only Google Search is enabled, then use it.
+    if (useGoogleSearch && !useCloud && !usePreloaded) {
+        console.log("Only Google Search enabled, using Google Search.");
         const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
         const responseStream = await streamAiResponse(currentMessages, [], modelToUse, { ...activeChat.groundingOptions, useGoogleSearch: true }, location);
         updateLastMessageInActiveChat(msg => ({ ...msg, responseType: ResponseType.GOOGLE_SEARCH }));
@@ -330,11 +339,14 @@ const App: React.FC = () => {
         const uniqueChunks = Array.from(new Map(allGroundingChunks.map(item => [item.web?.uri || item.maps?.uri, item])).values());
         updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: uniqueChunks }));
         return;
+    } else if (elasticResults.length === 0 && (useCloud || usePreloaded)) {
+        // If elastic results are empty, but cloud or preloaded were enabled,
+        // and Google Search is not exclusively enabled, then no results.
+        updateLastMessageInActiveChat(msg => ({ ...msg, content: "I couldn't find any relevant information from your data sources." }));
+        return;
     }
     
-    const sources: Source[] = elasticResults.map(r => r.source);
-    console.log("sources", sources);
-    updateLastMessageInActiveChat(msg => ({ ...msg, sources }));
+    updateLastMessageInActiveChat(msg => ({ ...msg, sources: elasticResults }));
 
     const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
     const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, activeChat.groundingOptions, location);
@@ -382,7 +394,7 @@ const App: React.FC = () => {
     const searchResults = await searchElastic(latestQuery);
     
     const editableSearchResults = searchResults.filter(r => {
-        const extension = r.source.fileName.split('.').pop()?.toLowerCase();
+        const extension = r.source.file_name.split('.').pop()?.toLowerCase();
         return extension && EDITABLE_EXTENSIONS.includes(extension);
     });
     
@@ -403,12 +415,12 @@ const App: React.FC = () => {
         if (responseObject.error) throw new Error(responseObject.error);
         
         const fullPath = responseObject.filePath;
-        const file = allFiles.find(f => `${f.path}/${f.fileName}` === fullPath);
+        const file = allFiles.find(f => `${f.path}/${f.file_name}` === fullPath);
         
         if (!file) throw new Error(`The model suggested editing a file I couldn't find: ${fullPath}`);
 
         const originalContent = await getFileContent(file);
-        if (originalContent === null) throw new Error(`Could not fetch original content for ${file.fileName}.`);
+        if (originalContent === null) throw new Error(`Could not fetch original content for ${file.file_name}.`);
 
         const suggestion: CodeSuggestion = {
             file,
@@ -418,7 +430,7 @@ const App: React.FC = () => {
             status: 'pending',
         };
         updateLastMessageInActiveChat(msg => ({ ...msg, content: `I have a suggestion for 
-file:${file.fileName}". Here are the changes:`, suggestion }));
+file:${file.file_name}". Here are the changes:`, suggestion }));
     } catch (e) {
         console.error("Code generation parsing error:", e);
         const errorMessage = e instanceof Error ? e.message : "Sorry, I couldn't generate the edit correctly.";
@@ -570,12 +582,12 @@ file:${file.fileName}". Here are the changes:`, suggestion }));
           const { success, newDataset } = updateFileContent(file, suggestedContent, activeChat.dataset);
           if (!success) {
             followUpMessage = { role: MessageRole.MODEL, content: `Sorry, I failed to apply the changes to 
-file:${file.fileName}". Could not find the file in the preloaded dataset.` };
+file:${file.file_name}". Could not find the file in the preloaded dataset.` };
           } else {
             updateActiveChat(c => ({...c, dataset: newDataset}));
             setEditedFiles(prev => new Map(prev).set(file!.id, { file: file!, originalContent: prev.get(file!.id)?.originalContent ?? originalContent, currentContent: suggestedContent }));
             followUpMessage = { role: MessageRole.MODEL, content: `Great! I've applied the changes to 
-file:${file.fileName}".`, editedFile: file };
+file:${file.file_name}".`, editedFile: file };
           }
       } else {
           followUpMessage = { role: MessageRole.MODEL, content: "Okay, I've discarded the changes." };
@@ -664,6 +676,7 @@ file:${file.fileName}".`, editedFile: file };
                 groundingOptions={activeChat?.groundingOptions}
                 onGroundingOptionsChange={handleGroundingOptionsChange}
                 apiError={apiError}
+                setApiError={setApiError}
                 cloudSearchError={cloudSearchError}
               />
            </ErrorBoundary>

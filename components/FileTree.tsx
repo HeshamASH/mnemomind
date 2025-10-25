@@ -11,16 +11,13 @@ const ChevronRightIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const FolderIcon: React.FC<{ isOpen: boolean }> = ({ isOpen }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-cyan-600 dark:text-cyan-500">
-        <path d={isOpen 
-            ? "M3.75 3.5A1.25 1.25 0 0 0 2.5 4.75v.283c0 .337.104.66.29.933l.92 1.379a.75.75 0 0 0 .64.355h8.3c.252 0 .487-.123.64-.355l.92-1.379a1.25 1.25 0 0 0 .29-.933V4.75A1.25 1.25 0 0 0 12.25 3.5h-8.5Z" 
-            : "M3.75 3.5A1.25 1.25 0 0 0 2.5 4.75v7.5c0 .69.56 1.25 1.25 1.25h8.5A1.25 1.25 0 0 0 13.5 12.25v-7.5A1.25 1.25 0 0 0 12.25 3.5h-8.5Z"} />
-        <path d="M2.5 8.75V12.25a.25.25 0 0 0 .25.25h10.5a.25.25 0 0 0 .25-.25V8.75A.25.25 0 0 0 13.25 8.5H2.75a.25.25 0 0 0-.25.25Z" />
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-cyan-600 dark:text-cyan-500">
+      <path d="M3.75 3A1.75 1.75 0 002 4.75v10.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25V6.5A1.75 1.75 0 0016.25 4.75H9.165a.25.25 0 01-.129-.038l-1.563-.781a1.75 1.75 0 00-1.598-.398H3.75z" />
     </svg>
 );
 
-const getFileIcon = (fileName: string) => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
+const getFileIcon = (file_name: string) => {
+    const extension = file_name.split('.').pop()?.toLowerCase();
     switch (extension) {
         case 'js':
         case 'jsx':
@@ -88,9 +85,9 @@ const buildFileTree = (files: Source[]): TreeNode[] => {
     });
 
     currentNode.children.push({
-      name: file.fileName,
+      name: file.file_name,
       type: 'file',
-      path: file.path ? `${file.path}/${file.fileName}` : file.fileName,
+      path: file.path ? `${file.path}/${file.file_name}` : file.file_name,
       source: file,
       children: [],
     });

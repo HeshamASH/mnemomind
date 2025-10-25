@@ -7,6 +7,7 @@ import AttachmentPreview from './AttachmentPreview';
 
 interface MessageProps {
   message: ChatMessage;
+  messageIndex: number;
   onSelectSource: (source: Source) => void;
   onSuggestionAction: (action: 'accepted' | 'rejected') => void;
   onExportToSheets: (tableData: (string | null)[][]) => void;
@@ -68,9 +69,10 @@ const MessageMetadata: React.FC<{ responseType?: ResponseType, modelId?: ModelId
 };
 
 
-const Message: React.FC<MessageProps> = ({ message, onSelectSource, onSuggestionAction, onExportToSheets }) => {
+const Message: React.FC<MessageProps> = ({ message, messageIndex, onSelectSource, onSuggestionAction, onExportToSheets }) => {
   const isModel = message.role === MessageRole.MODEL;
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isSourcesOpen, setIsSourcesOpen] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   
   const hasElasticSources = message.sources && message.sources.length > 0;
@@ -95,6 +97,26 @@ const Message: React.FC<MessageProps> = ({ message, onSelectSource, onSuggestion
   }, [isSpeaking, message.content]);
 
   useEffect(() => {
+    const handleSourceLinkClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { sourceId, messageIndex: clickedMessageIndex } = customEvent.detail;
+      if (messageIndex === clickedMessageIndex) {
+        setIsSourcesOpen(true);
+        setTimeout(() => {
+            const element = document.getElementById(sourceId);
+            element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    window.addEventListener('sourceLinkClick', handleSourceLinkClick);
+
+    return () => {
+      window.removeEventListener('sourceLinkClick', handleSourceLinkClick);
+    };
+  }, [messageIndex]);
+
+  useEffect(() => {
     return () => {
         // Cleanup speech synthesis on component unmount
         if (utteranceRef.current) {
@@ -117,7 +139,7 @@ const Message: React.FC<MessageProps> = ({ message, onSelectSource, onSuggestion
           )}
           <div>
              {message.content ? (
-                <MarkdownRenderer text={message.content} onExportToSheets={onExportToSheets} />
+                <MarkdownRenderer text={message.content} onExportToSheets={onExportToSheets} messageIndex={messageIndex} />
              ) : (
                 isModel && (
                     <div className="flex items-center gap-1.5">
@@ -159,37 +181,47 @@ const Message: React.FC<MessageProps> = ({ message, onSelectSource, onSuggestion
         )}
         {(hasElasticSources || hasGroundingChunks) && (
           <div className="mt-3 space-y-2">
-            {hasElasticSources && (
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2 self-center">Sources:</span>
-                {message.sources.map((source) => (
-                  <SourcePill key={source.id} source={source} onClick={() => onSelectSource(source)} />
-                ))}
-              </div>
-            )}
-            {hasGroundingChunks && (
-              <div className="flex flex-wrap gap-2 items-center">
-                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2 self-center">Web Results:</span>
-                 {message.groundingChunks.map((chunk, index) => {
-                    const source = chunk.web || chunk.maps;
-                    if (!source || !source.uri) return null;
-                    const hostname = source.uri ? new URL(source.uri).hostname.replace('www.', '') : 'source';
-                    return (
-                      <a 
-                        key={index} 
-                        href={source.uri} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-full cursor-pointer transition-colors duration-200 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800/60 text-blue-700 dark:text-blue-300"
-                        title={source.title}
-                      >
-                        {chunk.web ? <WebIcon /> : <MapIcon />}
-                        <span className="truncate max-w-[200px]">{source.title || hostname}</span>
-                      </a>
-                    )
-                 })}
-              </div>
-            )}
+            <button onClick={() => setIsSourcesOpen(!isSourcesOpen)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full px-3 py-1">
+              <span>Sources</span>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 transition-transform ${isSourcesOpen ? 'rotate-90' : ''}`}>
+                <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <div className={`transition-all duration-500 ease-in-out overflow-y-auto ${isSourcesOpen ? 'max-h-96' : 'max-h-0'}`}>
+              <>
+                {hasElasticSources && (
+                  <div className="flex flex-wrap gap-2 items-center pt-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2 self-center">Sources:</span>
+                    {message.sources.map((result, index) => (
+                      <SourcePill key={result.source.id} id={`source-${messageIndex}-${index + 1}`} result={result} onClick={() => onSelectSource(result.source)} chunkIndex={index + 1} />
+                    ))}
+                  </div>
+                )}
+                {hasGroundingChunks && (
+                  <div className="flex flex-wrap gap-2 items-center pt-2">
+                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2 self-center">Web Results:</span>
+                     {message.groundingChunks.map((chunk, index) => {
+                        const source = chunk.web || chunk.maps;
+                        if (!source || !source.uri) return null;
+                        const hostname = source.uri ? new URL(source.uri).hostname.replace('www.', '') : 'source';
+                        return (
+                          <a 
+                            key={index} 
+                            href={source.uri} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-full cursor-pointer transition-colors duration-200 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800/60 text-blue-700 dark:text-blue-300"
+                            title={source.title}
+                          >
+                            {chunk.web ? <WebIcon /> : <MapIcon />}
+                            <span className="truncate max-w-[200px]">{source.title || hostname}</span>
+                          </a>
+                        )
+                     })}
+                  </div>
+                )}
+              </>
+            </div>
           </div>
         )}
       </div>

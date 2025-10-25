@@ -129,7 +129,7 @@ const DiffViewerModal: React.FC<DiffViewerModalProps> = ({ record, onClose }) =>
             >
                 <header className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700/50 flex-shrink-0">
                     <div>
-                        <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">Changes for {record.file.fileName}</h3>
+                        <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">Changes for {record.file.file_name}</h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{record.file.path}</p>
                     </div>
                     <div className="flex items-center gap-4">

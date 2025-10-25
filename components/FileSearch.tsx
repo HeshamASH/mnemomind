@@ -23,7 +23,7 @@ const FileSearch: React.FC<FileSearchProps> = ({ files, onClose, onSelectFile })
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredFiles = files.filter(file => {
-    const fullPath = `${file.path}/${file.fileName}`.toLowerCase();
+    const fullPath = `${file.path}/${file.file_name}`.toLowerCase();
     return fullPath.includes(searchTerm.toLowerCase());
   });
 
@@ -60,7 +60,7 @@ const FileSearch: React.FC<FileSearchProps> = ({ files, onClose, onSelectFile })
                     <div className="flex items-center gap-3">
                     <FileIcon />
                     <div className="overflow-hidden">
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{file.fileName}</p>
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{file.file_name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{file.path}</p>
                     </div>
                     </div>

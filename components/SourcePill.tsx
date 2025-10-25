@@ -2,9 +2,11 @@ import React from 'react';
 import { Source } from '../types';
 
 interface SourcePillProps {
-  source: Source;
+  result: ElasticResult;
   onClick: () => void;
   isEdited?: boolean;
+  id?: string;
+  chunkIndex: number;
 }
 
 const FileIcon: React.FC = () => (
@@ -20,21 +22,24 @@ const EditIcon: React.FC = () => (
 );
 
 
-const SourcePill: React.FC<SourcePillProps> = ({ source, onClick, isEdited = false }) => {
-  const baseClasses = "flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-full cursor-pointer transition-colors duration-200";
+const SourcePill: React.FC<SourcePillProps> = ({ result, onClick, isEdited = false, id, chunkIndex }) => {
+  const baseClasses = "flex items-center gap-1.5 text-sm font-semibold cursor-pointer";
   const colorClasses = isEdited 
-    ? "bg-green-100 dark:bg-green-900/50 hover:bg-green-200 dark:hover:bg-green-800/60 text-green-700 dark:text-green-300" 
-    : "bg-slate-200 dark:bg-slate-700/50 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300";
+    ? "text-green-700 dark:text-green-300 hover:underline" 
+    : "text-slate-600 dark:text-slate-300 hover:underline";
 
   return (
-    <button 
-      onClick={onClick}
-      className={`${baseClasses} ${colorClasses}`}
-      title={source.path}
-    >
-      {isEdited ? <EditIcon /> : <FileIcon />}
-      <span>{source.fileName}</span>
-    </button>
+    <div id={id} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg w-full">
+      <button 
+        onClick={onClick}
+        className={`${baseClasses} ${colorClasses}`}
+        title={result.source.path}
+      >
+        {isEdited ? <EditIcon /> : <FileIcon />}
+        <span className="mr-1">[{chunkIndex}]</span><span>{result.source.file_name}</span>
+      </button>
+      <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 prose prose-sm prose-slate dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: result.contentSnippet }} />
+    </div>
   );
 };
 

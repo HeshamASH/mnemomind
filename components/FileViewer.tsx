@@ -26,8 +26,8 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
   const codeRef = useRef<HTMLElement>(null);
   const markdownRef = useRef<HTMLDivElement>(null);
   
-  const isMarkdown = file.fileName.toLowerCase().endsWith('.md');
-  const isPdf = file.fileName.toLowerCase().endsWith('.pdf');
+  const isMarkdown = file.file_name.toLowerCase().endsWith('.md');
+  const isPdf = file.file_name.toLowerCase().endsWith('.pdf');
 
   useEffect(() => {
     if (content === 'Loading...') return;
@@ -45,7 +45,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
     } else if (!isMarkdown && !isPdf && codeRef.current && typeof hljs !== 'undefined') {
        // For non-markdown, non-pdf, attempt to highlight, but gracefully fallback to plaintext.
        try {
-            const extension = file.fileName.split('.').pop() || 'plaintext';
+            const extension = file.file_name.split('.').pop() || 'plaintext';
             // Check if the language is supported by highlight.js, otherwise default to plaintext
             const language = hljs.getLanguage(extension) ? extension : 'plaintext';
             
@@ -62,7 +62,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
             }
         }
     }
-  }, [content, isMarkdown, isPdf, file.fileName]);
+  }, [content, isMarkdown, isPdf, file.file_name]);
 
   return (
     <div 
@@ -75,7 +75,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
       >
         <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700/50 flex-shrink-0">
           <div>
-            <h3 className="font-bold text-lg text-cyan-600 dark:text-cyan-400">{file.fileName}</h3>
+            <h3 className="font-bold text-lg text-cyan-600 dark:text-cyan-400">{file.file_name}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{file.path}</p>
           </div>
           <button onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" aria-label="Close file viewer">

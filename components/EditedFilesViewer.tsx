@@ -43,7 +43,7 @@ const EditedFilesViewer: React.FC<EditedFilesViewerProps> = ({ editedFiles, onCl
                                     <div className="flex items-center gap-3">
                                         <FileIcon />
                                         <div className="overflow-hidden">
-                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{record.file.fileName}</p>
+                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{record.file.file_name}</p>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{record.file.path}</p>
                                         </div>
                                     </div>
