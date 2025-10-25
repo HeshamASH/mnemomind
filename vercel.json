@@ -1,5 +1,11 @@
 {
     "rewrites": [
         { "source": "/api/(.*)", "destination": "/api/main.py" }
-    ]
+    ],
+    "build": {
+        "env": {
+            "FASTEMBED_CACHE_DIR": "/tmp/fastembed_cache"
+        },
+        "command": "python -c \"from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/tmp/fastembed_cache')\" && npm run build"
+    }
 }

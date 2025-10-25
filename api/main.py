@@ -174,7 +174,7 @@ async def export_to_sheets(request: Request, credentials: str = Cookie(None)):
 
 # ... (existing code) ...
 
-embedding_model = TextEmbedding(model_name='BAAI/bge-small-en-v1.5')
+embedding_model = TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=os.getenv("FASTEMBED_CACHE_DIR"))
 
 # ... (existing code) ...
 
