@@ -340,8 +340,45 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
             if 'index_not_found_exception' in es_err_str:
                 logging.warning(f"Index '{ELASTIC_INDEX}' not found. Returning empty results.")
                 return []
-            logging.error(f"Elasticsearch search error: {es_err_str}")
-            raise HTTPException(status_code=502, detail=f"Elasticsearch search error: {es_err_str}")
+            # Fallback: if knn is not supported on this cluster, try script_score with cosineSimilarity
+            if 'unknown query [knn]' in es_err_str or 'parsing_exception' in es_err_str or 'KNN' in es_err_str:
+                logging.warning("KNN query not supported, falling back to script_score cosine similarity.")
+                fallback_body = {
+                    "size": 10,
+                    "_source": ["file_name", "path", "chunk_text"],
+                    "query": {
+                        "script_score": {
+                            "query": { "exists": { "field": "chunk_vector" } },
+                            "script": {
+                                "source": "cosineSimilarity(params.query_vector, 'chunk_vector') + 1.0",
+                                "params": { "query_vector": query_vector }
+                            }
+                        }
+                    },
+                    "highlight": {
+                        "fields": {
+                            "chunk_text": {
+                                "fragment_size": 150,
+                                "number_of_fragments": 1
+                            }
+                        },
+                        "pre_tags": [""],
+                        "post_tags": [""]
+                    }
+                }
+                try:
+                    response = es.search(
+                        index=ELASTIC_INDEX,
+                        body=fallback_body,
+                        request_timeout=20
+                    )
+                except Exception as es_fallback_err:
+                    es_fallback_str = str(es_fallback_err)
+                    logging.error(f"Elasticsearch script_score fallback error: {es_fallback_str}")
+                    raise HTTPException(status_code=502, detail=f"Elasticsearch search error (fallback): {es_fallback_str}")
+            else:
+                logging.error(f"Elasticsearch search error: {es_err_str}")
+                raise HTTPException(status_code=502, detail=f"Elasticsearch search error: {es_err_str}")
 
         logging.info(f"Elasticsearch response received for query '{query_text}'. Hits: {len(response.get('hits', {}).get('hits', []))}")
 
