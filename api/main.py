@@ -185,7 +185,7 @@ import logging
 @app.post("/api/search")
 async def search_documents(query: SearchQuery):
     try:
-        query_vector = embedding_model.encode(query.query).tolist()
+        query_vector = list(embedding_model.embed([query.query]))[0].tolist()
 
         search_body = {
             "knn": {
