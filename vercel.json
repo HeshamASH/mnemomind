@@ -3,7 +3,26 @@
   "functions": {
     "api/main.py": {
       "runtime": "@vercel/python@5.0.10",
-      "excludeFiles": "node_modules/**,dist/**,__pycache__/**,requirements.txt"
+      "maxDuration": 30, // Optional: Increase duration if needed for model loading/inference
+      "excludeFiles": [
+        "node_modules/**", // Keep frontend node_modules out
+        "dist/**",         // Keep frontend build out
+        "__pycache__/**",  // Keep Python bytecode cache out
+        "*.pyc",           // Keep individual bytecode files out
+        "requirements.txt",// Exclude the requirements file itself
+        ".env*",           // Exclude environment files
+        ".git/**",         // Exclude git history
+        "fixed_documents/**", // Exclude local documents if not needed at runtime
+        "*.md",            // Exclude markdown files
+        // --- Added Cache Exclusions ---
+        ".cache/**",       // General cache directory
+        "/tmp/**",         // Vercel's temporary directory (use cautiously)
+        "/vercel/.cache/**", // Common Vercel cache location
+        ".venv/**",        // Exclude virtual environment if present
+        "**/site-packages/torch/**", // Attempt to exclude large libraries like torch if cached within site-packages
+        "**/site-packages/transformers/**", // Attempt to exclude transformers cache
+        "**/sentence_transformers/models/**" // Specific sentence-transformers model cache
+      ]
     }
   },
   "routes": [
@@ -12,8 +31,12 @@
       "dest": "api/main.py"
     },
     {
-      "src": "/(.*)",
+      "handle": "filesystem" // Serve static files from 'dist' if they match
+    },
+    {
+      "src": "/(.*)", // Fallback for SPA routing
       "dest": "/index.html"
     }
-  ]
+  ],
+  "outputDirectory": "dist" // Ensure Vercel knows where the static frontend build is
 }
