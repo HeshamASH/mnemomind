@@ -578,7 +578,7 @@ const App: React.FC = () => {
             console.error("Error during Gemini grounding fallback:", groundingError);
             let errorMsg = "Sorry, I couldn't find information in the documents and an external search failed. Please try again.";
             // **FIXED: Check specific error for safety filter**
-            if (groundingError instanceof Error && groundingError.message === "BlockedBySafetyFilter") {
+            if (groundingError instanceof Error && groundingError.message.includes("SAFETY")) {
                  errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
             } else if (groundingError instanceof Error) {
                 errorMsg = `An error occurred during the external search: ${groundingError.message}`;
