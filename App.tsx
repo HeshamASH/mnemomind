@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 // Ensure correct imports
 import {
     ChatMessage, MessageRole, Source, ElasticResult, Intent, CodeSuggestion,
-    ModelId, MODELS, ResponseType, Chat, Theme, Attachment, DataSource, GroundingOptions, DriveFile, EditedFileRecord, GroundingChunk // Added GroundingChunk
+    ModelId, MODELS, ResponseType, Chat, Theme, Attachment, DataSource, GroundingOptions, DriveFile, EditedFileRecord, GroundingChunk, GeolocationPosition // Added GeolocationPosition and GroundingChunk
 } from './types'; // Make sure Chat is imported
 import {
     // Keep elasticService imports as they are used
@@ -12,7 +12,7 @@ import {
 } from './services/elasticService';
 import {
     streamAiResponse, classifyIntent, streamChitChatResponse,
-    streamCodeGenerationResponse, rewriteQuery
+    streamCodeGenerationResponse, rewriteQuery, getTextFromChunk // Import getTextFromChunk
 } from './services/geminiService';
 import Header from './components/Header';
 import ChatHistory from './components/ChatHistory';
@@ -521,41 +521,49 @@ const App: React.FC = () => {
                 [], // Empty context for API grounding
                 modelToUse,
                 currentGroundingOptions, // Pass the enabled options
+                location // Pass location
             );
 
             let accumulatedContent = '';
             let allGroundingAttributions: any[] = []; // Store raw attributions
 
-            for await (const chunk of responseStream.stream) {
-                 const chunkText = chunk.text;
+            // **FIXED: Correctly iterate over the async generator**
+            for await (const chunk of responseStream) {
+                 // **FIXED: Use getTextFromChunk helper**
+                 const chunkText = getTextFromChunk(chunk);
                  accumulatedContent += chunkText;
                  updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
 
                 // Safely access grounding/citation metadata and attributions
                 const candidateAny = (chunk as any)?.candidates?.[0];
+
+                // **Refined: Check multiple possible locations for grounding data**
                 const newAttributions =
-                    candidateAny?.groundingMetadata?.groundingChunks ||
-                    candidateAny?.citationMetadata?.citations ||
-                    candidateAny?.groundingAttributions; // fallback for older/undocumented shapes
+                    candidateAny?.groundingMetadata?.groundingAttributions || // Preferred structure
+                    candidateAny?.groundingMetadata?.webSearchQueries?.length > 0 ? candidateAny?.groundingMetadata?.groundingAttributions : undefined || // Check if search was used
+                    candidateAny?.citationMetadata?.citationSources; // Older structure
 
                 if (Array.isArray(newAttributions) && newAttributions.length > 0) {
                     allGroundingAttributions.push(...newAttributions);
+                    console.log("Received grounding attributions:", newAttributions); // Log received data
                 }
             }
 
              // Process and store unique grounding chunks AFTER stream finishes
              const uniqueAttributions = Array.from(new Map(
                 allGroundingAttributions
-                  .filter((attr: any) => attr?.web?.uri || attr?.maps?.uri || attr?.uri)
-                  .map((attr: any) => [attr.web?.uri || attr.maps?.uri || attr.uri, attr]) // Use URI as key for deduplication
+                  // **FIXED: Adapt to citationSources structure if needed**
+                  .filter((attr: any) => attr?.uri || attr.web?.uri || attr.maps?.uri)
+                  .map((attr: any) => [attr.uri || attr.web?.uri || attr.maps?.uri, attr]) // Use URI as key
              ).values());
 
              // Map valid attributions to our GroundingChunk format
              const finalGroundingChunks: GroundingChunk[] = uniqueAttributions
                .map((attr: any) => ({
+                 // **FIXED: Handle both `web` object and direct `uri`/`title`**
                  web: attr.web
                    ? { uri: attr.web.uri, title: attr.web.title || '' }
-                   : attr.uri
+                   : attr.uri // Check for direct uri/title (from citationSources)
                      ? { uri: attr.uri, title: attr.title || '' }
                      : undefined,
                  maps: attr.maps ? { uri: attr.maps.uri, title: attr.maps.title || '' } : undefined,
@@ -563,13 +571,15 @@ const App: React.FC = () => {
                }))
                .filter(chunk => chunk.web || chunk.maps); // Ensure at least one type is present
 
+            console.log("Final unique grounding chunks:", finalGroundingChunks); // Log processed data
             updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: finalGroundingChunks }));
 
         } catch (groundingError: unknown) {
             console.error("Error during Gemini grounding fallback:", groundingError);
             let errorMsg = "Sorry, I couldn't find information in the documents and an external search failed. Please try again.";
-            if (typeof groundingError === 'object' && groundingError !== null && 'constructor' in groundingError && typeof (groundingError as any).constructor.name === 'string' && (groundingError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
-                errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
+            // **FIXED: Check specific error for safety filter**
+            if (groundingError instanceof Error && groundingError.message === "BlockedBySafetyFilter") {
+                 errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
             } else if (groundingError instanceof Error) {
                 errorMsg = `An error occurred during the external search: ${groundingError.message}`;
             }
@@ -602,21 +612,24 @@ const App: React.FC = () => {
             const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
             // Pass elasticResults as context, explicitly disable API grounding for this call
             const apiGroundingOptions = { ...currentGroundingOptions, useGoogleSearch: false, useGoogleMaps: false };
-            const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, apiGroundingOptions);
+            const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, apiGroundingOptions, location); // Pass location
 
             let accumulatedContent = '';
-            for await (const chunk of responseStream.stream) {
-                const chunkText = chunk.text;
+            // **FIXED: Correctly iterate over the async generator**
+            for await (const chunk of responseStream) {
+                 // **FIXED: Use getTextFromChunk helper**
+                const chunkText = getTextFromChunk(chunk);
                 accumulatedContent += chunkText;
                 updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
             }
             // Optional: Final update in case the stream closes before the last chunk renders
-            updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
+            // updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
 
         } catch (ragError: unknown) {
             console.error("Error during RAG generation:", ragError);
             let errorMsg = "Sorry, I found relevant documents but couldn't generate an answer. Please try again.";
-            if (typeof ragError === 'object' && ragError !== null && 'constructor' in ragError && typeof (ragError as any).constructor.name === 'string' && (ragError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+            // **FIXED: Check specific error for safety filter**
+            if (ragError instanceof Error && ragError.message === "BlockedBySafetyFilter") {
                 errorMsg = "I'm sorry, but I can't provide a response based on the provided documents. The request was blocked by the safety filter. Please try a different query.";
             } else if (ragError instanceof Error) {
                 errorMsg = `An error occurred during answer generation: ${ragError.message}`;
@@ -645,9 +658,10 @@ const App: React.FC = () => {
         const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
         const responseStream = await streamChitChatResponse(currentMessages, modelToUse);
         let accumulatedContent = '';
-        for await (const chunk of responseStream.stream) {
-            // Check if chunk has the text method
-            const chunkText = chunk.text;
+        // **FIXED: Correctly iterate over the async generator**
+        for await (const chunk of responseStream) {
+             // **FIXED: Use getTextFromChunk helper**
+            const chunkText = getTextFromChunk(chunk);
             accumulatedContent += chunkText;
             // Update the last message (the placeholder) incrementally
             updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
@@ -657,8 +671,8 @@ const App: React.FC = () => {
     } catch (error: unknown) {
         console.error('ChitChat Error:', error);
         let errorMsg = "Sorry, I couldn't get a response. Please try again.";
-        // Check if the error is a GoogleGenerativeAIResponseError, which indicates a blocked response
-        if (typeof error === 'object' && error !== null && 'constructor' in error && typeof (error as any).constructor.name === 'string' && (error as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+         // **FIXED: Check specific error for safety filter**
+         if (error instanceof Error && error.message.includes('SAFETY')) { // Simple check
             errorMsg = "I'm sorry, but I can't provide a response to that. The request was blocked by the safety filter. Please try rephrasing your message.";
         } else if (error instanceof Error) {
             errorMsg = `An error occurred: ${error.message}`;
@@ -712,15 +726,18 @@ const App: React.FC = () => {
         let responseJsonText = '';
         let streamFinished = false;
         try {
-            for await (const chunk of responseStream.stream) {
-                const chunkText = chunk.text;
+            // **FIXED: Correctly iterate over the async generator**
+            for await (const chunk of responseStream) {
+                // **FIXED: Use getTextFromChunk helper**
+                const chunkText = getTextFromChunk(chunk);
                 responseJsonText += chunkText;
             }
             streamFinished = true;
         } catch (streamError: unknown) {
              console.error("Error reading code generation stream:", streamError);
              let errorMsg = "An error occurred while receiving the code suggestion. Please try again.";
-             if (typeof streamError === 'object' && streamError !== null && 'constructor' in streamError && typeof (streamError as any).constructor.name === 'string' && (streamError as any).constructor.name === 'GoogleGenerativeAIResponseError') {
+              // **FIXED: Check specific error for safety filter**
+             if (streamError instanceof Error && streamError.message.includes('SAFETY')) { // Simple check
                  errorMsg = "I'm sorry, but I can't generate a code suggestion for that. The request was blocked by the safety filter. Please try rephrasing your request.";
              } else if (streamError instanceof Error) {
                  errorMsg = `An error occurred while generating the code: ${streamError.message}`;
