@@ -10,13 +10,13 @@ from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
-from sentence_transformers import SentenceTransformer # Added import
+from fastembed.embedding import DefaultEmbedding
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Construct the path to the .env.local file
+# --- Environment and Elasticsearch Setup ---
 dotenv_path = Path(__file__).resolve().parent.parent / '.env.local'
 load_dotenv(dotenv_path=dotenv_path)
 
@@ -24,34 +24,35 @@ ELASTIC_CLOUD_ID = os.getenv("ELASTIC_CLOUD_ID")
 ELASTIC_API_KEY = os.getenv("ELASTIC_API_KEY")
 ELASTIC_INDEX = os.getenv("ELASTIC_INDEX")
 
-if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
-    # Use logging instead of print for errors
-    logging.error("Missing required environment variables for Elasticsearch")
-    raise RuntimeError("Missing required environment variables for Elasticsearch")
+es = None
+embedding_model = None
 
-try:
-    es = Elasticsearch(
-        cloud_id=ELASTIC_CLOUD_ID,
-        api_key=ELASTIC_API_KEY,
-        request_timeout=30 # Optional: Set a default timeout
-    )
-    # Verify connection
-    if not es.ping():
-        logging.error("Failed to connect to Elasticsearch.")
-        raise RuntimeError("Failed to connect to Elasticsearch.")
-    logging.info("Successfully connected to Elasticsearch.")
-except Exception as e:
-    logging.error(f"Error connecting to Elasticsearch: {e}", exc_info=True)
-    raise RuntimeError(f"Error connecting to Elasticsearch: {e}")
+if all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
+    try:
+        es = Elasticsearch(
+            cloud_id=ELASTIC_CLOUD_ID,
+            api_key=ELASTIC_API_KEY,
+            request_timeout=30
+        )
+        if not es.ping():
+            logging.error("Failed to connect to Elasticsearch.")
+            es = None # Set to None on connection failure
+        else:
+            logging.info("Successfully connected to Elasticsearch.")
+
+    except Exception as e:
+        logging.error(f"Error connecting to Elasticsearch: {e}", exc_info=True)
+        es = None # Ensure es is None if initialization fails
+else:
+    logging.warning("Elasticsearch environment variables not set. API will have limited functionality.")
 
 
 app = FastAPI()
 
 # Secret key for signing session data
-# In a production application, this should be a long, random string stored securely
-SECRET_KEY = os.getenv("SECRET_KEY", "your-fallback-secret-key") # Load from env or use fallback
+SECRET_KEY = os.getenv("SECRET_KEY", "your-fallback-secret-key")
 if SECRET_KEY == "your-fallback-secret-key":
-     logging.warning("Using fallback SECRET_KEY. Set a strong SECRET_KEY environment variable for production.")
+     logging.warning("Using fallback SECRET_KEY. Set a strong SECRET_KEY in .env.local for production.")
 serializer = URLSafeSerializer(SECRET_KEY)
 
 # --- Pydantic Models ---
@@ -65,14 +66,12 @@ class Source(BaseModel):
 
 # --- Embedding Model ---
 try:
-    # Load the sentence transformer model upon startup
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    logging.info("Sentence Transformer model loaded successfully.")
+    # Initialize FastEmbed model, specifying a writable cache directory for Vercel
+    embedding_model = DefaultEmbedding('sentence-transformers/all-MiniLM-L6-v2', cache_dir='/tmp/fastembed')
+    logging.info("FastEmbed model loaded successfully.")
 except Exception as e:
-    logging.error(f"Failed to load Sentence Transformer model: {e}", exc_info=True)
-    # Depending on your app's requirements, you might want to raise an error here
-    # raise RuntimeError(f"Failed to load Sentence Transformer model: {e}")
-    embedding_model = None # Set to None if loading fails
+    logging.error(f"Failed to load FastEmbed model: {e}", exc_info=True)
+    # embedding_model is already None, so just log
 
 # --- Google OAuth Helper ---
 def credentials_to_dict(credentials):
@@ -272,15 +271,18 @@ async def export_to_sheets(request: Request, credentials: str | None = Cookie(No
 
 
 @app.post("/api/search")
-async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for clarity
-    """Searches documents in Elasticsearch using KNN vector search and highlighting."""
-    if not embedding_model:
-        logging.error("Embedding model not loaded, cannot perform search.")
-        raise HTTPException(status_code=503, detail="Search service temporarily unavailable (model loading failed).")
+async def search_documents(query_body: SearchQuery = Body(...)):
+    """Searches documents in Elasticsearch using KNN vector search."""
+    if not es or not embedding_model:
+        logging.error("Search attempted but Elasticsearch or embedding model not available.")
+        raise HTTPException(status_code=503, detail="Search service is not configured or unavailable.")
+
     try:
         query_text = query_body.query
         logging.info(f"Received search query: '{query_text}'")
-        query_vector = embedding_model.encode(query_text).tolist()
+
+        # Generate embedding for the query
+        query_embedding = list(embedding_model.embed(query_text)[0]) # Convert numpy array to list
 
         search_body = {
             "knn": {
@@ -402,13 +404,16 @@ async def get_file_content(file_id: str):
 @app.get("/api/files")
 async def get_all_files():
     """Retrieves a list of all indexed files (ID, name, path)."""
+    if not es:
+        logging.warning("Attempted to get files, but Elasticsearch is not configured.")
+        return [] # Return empty list if ES is not available
+
     try:
         logging.info("Fetching list of all indexed files.")
-        # Use scroll API if expecting thousands of files, otherwise 'size' is okay for hundreds/few thousands
         response = es.search(
             index=ELASTIC_INDEX,
             body={
-                "size": 1000, # Adjust size limit as needed, or implement scrolling
+                "size": 1000,
                 "query": { "match_all": {} },
                 "_source": ["file_name", "path"] # Ensure these fields exist in mapping
             },
