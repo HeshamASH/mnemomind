@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
-from sentence_transformers import SentenceTransformer # Added import
+from fastembed import TextEmbedding
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
 
 # Configure logging
@@ -63,16 +63,21 @@ class Source(BaseModel):
     fileName: str
     path: str
 
-# --- Embedding Model ---
-try:
-    # Load the sentence transformer model upon startup
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    logging.info("Sentence Transformer model loaded successfully.")
-except Exception as e:
-    logging.error(f"Failed to load Sentence Transformer model: {e}", exc_info=True)
-    # Depending on your app's requirements, you might want to raise an error here
-    # raise RuntimeError(f"Failed to load Sentence Transformer model: {e}")
-    embedding_model = None # Set to None if loading fails
+# --- Embedding Model (FastEmbed) ---
+embedding_model = None  # type: ignore
+
+def get_embedder():
+    global embedding_model
+    if embedding_model is None:
+        try:
+            # Choose a lightweight, high-quality default model
+            # You can change to another supported model as needed
+            embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            logging.info("FastEmbed model loaded successfully.")
+        except Exception as e:
+            logging.error(f"Failed to load FastEmbed model: {e}", exc_info=True)
+            embedding_model = None
+    return embedding_model
 
 # --- Google OAuth Helper ---
 def credentials_to_dict(credentials):
@@ -274,13 +279,19 @@ async def export_to_sheets(request: Request, credentials: str | None = Cookie(No
 @app.post("/api/search")
 async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for clarity
     """Searches documents in Elasticsearch using KNN vector search and highlighting."""
-    if not embedding_model:
+    embedder = get_embedder()
+    if not embedder:
         logging.error("Embedding model not loaded, cannot perform search.")
         raise HTTPException(status_code=503, detail="Search service temporarily unavailable (model loading failed).")
     try:
         query_text = query_body.query
         logging.info(f"Received search query: '{query_text}'")
-        query_vector = embedding_model.encode(query_text).tolist()
+        # FastEmbed returns a generator; take the first (and only) vector for the single query
+        try:
+            query_vector = list(next(embedder.embed([query_text])))
+        except Exception as e:
+            logging.error(f"Failed to embed query text: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to embed query text.")
 
         search_body = {
             "knn": {
