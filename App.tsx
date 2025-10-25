@@ -42,6 +42,23 @@ const EDITABLE_EXTENSIONS = [
     'css', 'scss', 'less', 'sass'
 ];
 
+// Helper to safely extract text from Gemini stream chunks
+const getStreamChunkText = (chunk: any): string => {
+  try {
+    if (chunk && typeof chunk.text === 'function') {
+      const t = chunk.text();
+      return typeof t === 'string' ? t : '';
+    }
+    const parts = chunk?.candidates?.[0]?.content?.parts;
+    if (Array.isArray(parts)) {
+      return parts.map((p: any) => (p?.text ?? '')).join('');
+    }
+    return '';
+  } catch {
+    return '';
+  }
+};
+
 
 // Interface moved from App.tsx scope for potential reuse if needed elsewhere
 // Or keep it inside App if only used there
@@ -527,7 +544,7 @@ const App: React.FC = () => {
             let allGroundingAttributions: any[] = []; // Store raw attributions
 
             for await (const chunk of responseStream.stream) {
-                 const chunkText = chunk.text;
+                 const chunkText = getStreamChunkText(chunk);
                  accumulatedContent += chunkText;
                  updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
 
@@ -600,7 +617,7 @@ const App: React.FC = () => {
 
             let accumulatedContent = '';
             for await (const chunk of responseStream.stream) {
-                const chunkText = chunk.text;
+                const chunkText = getStreamChunkText(chunk);
                 accumulatedContent += chunkText;
                 updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
             }
@@ -635,7 +652,7 @@ const App: React.FC = () => {
         let accumulatedContent = '';
         for await (const chunk of responseStream.stream) {
             // Check if chunk has the text method
-            const chunkText = chunk.text;
+            const chunkText = getStreamChunkText(chunk);
             accumulatedContent += chunkText;
             // Update the last message (the placeholder) incrementally
             updateLastMessageInActiveChat(msg => ({ ...msg, content: accumulatedContent }));
@@ -695,7 +712,7 @@ const App: React.FC = () => {
         let streamFinished = false;
         try {
             for await (const chunk of responseStream.stream) {
-                const chunkText = chunk.text;
+                const chunkText = getStreamChunkText(chunk);
                 responseJsonText += chunkText;
             }
             streamFinished = true;
