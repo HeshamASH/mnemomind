@@ -1,5 +1,11 @@
-import { GoogleGenerativeAI, Content, Part, Tool } from "@google/generative-ai";
-import { ElasticResult, Intent, ChatMessage, GroundingOptions } from '../types';
+import { GoogleGenerativeAI, Content, Part, Tool, GenerateContentResponse, FunctionDeclarationTool, FunctionDeclarationsTool, GoogleSearchTool } from "@google/generative-ai";
+import { ElasticResult, Intent, ChatMessage, GroundingOptions, GeolocationPosition } from '../types'; // Added GeolocationPosition
+
+// Function to safely get text from a stream chunk
+const getTextFromChunk = (chunk: GenerateContentResponse): string => {
+    // Check candidates, content, parts, and text existence safely
+    return chunk?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+};
 
 // Updated instruction with a placeholder for dynamic replacement
 const getSystemInstruction = (hasDataSource: boolean, isGoogleSearchEnabled: boolean): string => {
@@ -171,10 +177,14 @@ export const streamChitChatResponse = async (history: ChatMessage[], model: stri
           // temperature: 0.7,
         };
 
-        return await genAI.generateContentStream({
+        const result = await genAI.generateContentStream({
           contents: conversationHistory,
           generationConfig: generationConfig
         });
+
+        // Return the async iterable directly
+        return result.stream;
+
     } catch (error) {
         console.error("Gemini API error (Chit-Chat):", error);
         throw new Error("There was an error communicating with the Gemini API.");
@@ -247,10 +257,11 @@ ${lastUserMessageContent.parts[0].text}
         });
 
         // Generate content using the final user message (containing history and context)
-        return await genAI.generateContentStream({
+        const result = await genAI.generateContentStream({
             contents: [finalUserMessage], // Send only the combined final message
             // generationConfig is already set in getGenerativeModel
         });
+        return result.stream; // Return the async iterable
     } catch (error) {
         console.error("Gemini API error (Code Generation):", error);
         throw new Error("There was an error communicating with the Gemini API for code generation.");
@@ -262,8 +273,9 @@ export const streamAiResponse = async (
   history: ChatMessage[],
   context: ElasticResult[],
   model: string,
-  groundingOptions: GroundingOptions
-) => {
+  groundingOptions: GroundingOptions,
+  location?: GeolocationPosition | null // Add location parameter
+): Promise<AsyncGenerator<GenerateContentResponse>> => {
   const ai = new GoogleGenerativeAI(getApiKey()); // Pass API key
 
   const conversationHistory = buildConversationHistory(history);
@@ -308,21 +320,35 @@ Follow all formatting rules and citation requirements outlined in your primary s
   const finalUserMessage: Content = { role: 'user', parts: finalParts };
 
   // Prepare tools if grounding options are enabled
-  const tools: Tool[] = [];
+  // --- IMPORTANT: Adjust Tool typing based on your installed @google/generative-ai version ---
+  // The exact types (Tool, GoogleSearchTool, FunctionDeclarationTool) might vary slightly.
+  const tools: (GoogleSearchTool | FunctionDeclarationTool | Tool)[] = [];
   if (groundingOptions.useGoogleSearch) {
-      // Cast to Tool to satisfy SDK typings if this property isn't available in the current version
-      tools.push({ googleSearch: {} } as unknown as Tool);
+    // Correct way to specify the Google Search tool
+    tools.push({ googleSearch: {} });
   }
-  if (groundingOptions.useGoogleMaps) {
-      // Assuming a specific tool definition for maps exists or needs to be defined
-      // For now, let's represent it generically; adjust based on actual API capabilities
-      // If using function calling, define the function signature here
-      // tools.push({ functionDeclarations: [/* Define Google Maps tool function signature here */] });
-      // If using built-in grounding, just having the tool might be enough (check API docs)
-       console.warn("Google Maps tool needs proper configuration/declaration based on Gemini API capabilities (grounding vs function calling).");
-       // For now, adding a placeholder assuming built-in grounding capability exists like googleSearch
-       // tools.push({ googleMaps: {} }); // Uncomment if a direct 'googleMaps' tool exists
 
+  // Define a simple function declaration for maps (example)
+  // You would need corresponding backend logic if you actually call this
+  // const mapsFunction: FunctionDeclaration = {
+  //     name: "find_places_nearby",
+  //     description: "Find places of a specific type near a location.",
+  //     parameters: {
+  //         type: FunctionDeclarationSchemaType.OBJECT,
+  //         properties: {
+  //             query: { type: FunctionDeclarationSchemaType.STRING, description: "Type of place (e.g., 'restaurants', 'coffee shops')" },
+  //             latitude: { type: FunctionDeclarationSchemaType.NUMBER, description: "Latitude of the location" },
+  //             longitude: { type: FunctionDeclarationSchemaType.NUMBER, description: "Longitude of the location" },
+  //         },
+  //         required: ["query", "latitude", "longitude"],
+  //     },
+  // };
+
+  if (groundingOptions.useGoogleMaps && location) {
+    // If using function calling for maps:
+    // tools.push({ functionDeclarations: [mapsFunction] });
+    console.warn("Google Maps grounding via built-in tools is not directly supported like Google Search. Function calling or specific API features would be needed.");
+    // For now, we won't add a specific tool for maps unless function calling is implemented
   }
 
   try {
@@ -334,21 +360,25 @@ Follow all formatting rules and citation requirements outlined in your primary s
 
     const genAI = ai.getGenerativeModel({
         model,
-        systemInstruction: finalSystemInstruction, // Use the dynamically generated instruction
-        tools: tools.length > 0 ? tools : undefined,
-        // Tool config might be needed for Maps if using functions or specific location biasing
-        // toolConfig: (groundingOptions.useGoogleMaps && location) ? { /* ... config ... */ } : undefined,
+        systemInstruction: { role: "system", parts: [{ text: finalSystemInstruction }] }, // Use correct structure
+        tools: tools.length > 0 ? tools as FunctionDeclarationsTool[] | GoogleSearchTool[] : undefined, // Cast tools appropriately
     });
 
     // Generate content stream using the combined final message
-    const responseStream = await genAI.generateContentStream({
+    const result = await genAI.generateContentStream({
       contents: [finalUserMessage], // Send only the combined message
       // generationConfig can be added here if needed (e.g., temperature)
     });
-    return responseStream;
+    return result.stream; // Return the async iterable stream
   } catch (error) {
     console.error("Gemini API error (RAG Response):", error);
+    // More specific error handling for safety filter
+    if (error instanceof Error && error.message.includes('SAFETY')) { // Simple check, adjust if needed
+        throw new Error("BlockedBySafetyFilter"); // Throw specific error type
+    }
     throw new Error("There was an error communicating with the Gemini API.");
   }
 };
 
+// Export the helper function
+export { getTextFromChunk };
