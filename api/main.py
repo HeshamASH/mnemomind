@@ -24,25 +24,36 @@ ELASTIC_CLOUD_ID = os.getenv("ELASTIC_CLOUD_ID")
 ELASTIC_API_KEY = os.getenv("ELASTIC_API_KEY")
 ELASTIC_INDEX = os.getenv("ELASTIC_INDEX")
 
-if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
-    # Use logging instead of print for errors
-    logging.error("Missing required environment variables for Elasticsearch")
-    raise RuntimeError("Missing required environment variables for Elasticsearch")
+# Lazy ES client initialization for Serverless
+es_client = None  # type: ignore
 
-try:
-    es = Elasticsearch(
-        cloud_id=ELASTIC_CLOUD_ID,
-        api_key=ELASTIC_API_KEY,
-        request_timeout=30 # Optional: Set a default timeout
-    )
-    # Verify connection
-    if not es.ping():
-        logging.error("Failed to connect to Elasticsearch.")
-        raise RuntimeError("Failed to connect to Elasticsearch.")
-    logging.info("Successfully connected to Elasticsearch.")
-except Exception as e:
-    logging.error(f"Error connecting to Elasticsearch: {e}", exc_info=True)
-    raise RuntimeError(f"Error connecting to Elasticsearch: {e}")
+def get_es():
+    global es_client
+    if es_client is not None:
+        return es_client
+    if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
+        logging.error("Missing required environment variables for Elasticsearch")
+        return None
+    try:
+        client = Elasticsearch(
+            cloud_id=ELASTIC_CLOUD_ID,
+            api_key=ELASTIC_API_KEY,
+            request_timeout=30
+        )
+        # Do not fail hard on ping in serverless; just log
+        try:
+            if not client.ping():
+                logging.warning("Elasticsearch ping failed; proceeding and deferring errors to request time.")
+            else:
+                logging.info("Successfully pinged Elasticsearch.")
+        except Exception as e:
+            logging.warning(f"Elasticsearch ping exception: {e}")
+        es_client = client
+        logging.info("Elasticsearch client initialized.")
+        return es_client
+    except Exception as e:
+        logging.error(f"Error creating Elasticsearch client: {e}", exc_info=True)
+        return None
 
 
 app = FastAPI()
@@ -283,6 +294,9 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
     if not embedder:
         logging.error("Embedding model not loaded, cannot perform search.")
         raise HTTPException(status_code=503, detail="Search service temporarily unavailable (model loading failed).")
+    es = get_es()
+    if not es:
+        raise HTTPException(status_code=503, detail="Search service unavailable: Elasticsearch not configured or unreachable.")
     try:
         query_text = query_body.query
         logging.info(f"Received search query: '{query_text}'")
@@ -362,6 +376,9 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
 async def get_file_content(file_id: str):
     """Gets the full content of a file from Elasticsearch based on its ID."""
     try:
+        es = get_es()
+        if not es:
+            raise HTTPException(status_code=503, detail="Content service unavailable: Elasticsearch not configured or unreachable.")
         logging.info(f"Fetching content for file ID: {file_id}")
         # Fetch the document source including 'content' and 'file_name'
         response = es.get(
@@ -414,6 +431,9 @@ async def get_file_content(file_id: str):
 async def get_all_files():
     """Retrieves a list of all indexed files (ID, name, path)."""
     try:
+        es = get_es()
+        if not es:
+            raise HTTPException(status_code=503, detail="File list service unavailable: Elasticsearch not configured or unreachable.")
         logging.info("Fetching list of all indexed files.")
         # Use scroll API if expecting thousands of files, otherwise 'size' is okay for hundreds/few thousands
         response = es.search(
