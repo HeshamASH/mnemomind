@@ -9,6 +9,7 @@ from pathlib import Path
 from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
+from fastembed import TextEmbedding
 
 # Construct the path to the .env.local file
 dotenv_path = Path(__file__).resolve().parent.parent / '.env.local'
@@ -169,11 +170,11 @@ async def export_to_sheets(request: Request, credentials: str = Cookie(None)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from sentence_transformers import SentenceTransformer
+
 
 # ... (existing code) ...
 
-embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+embedding_model = TextEmbedding(model_name='BAAI/bge-small-en-v1.5')
 
 # ... (existing code) ...
 
