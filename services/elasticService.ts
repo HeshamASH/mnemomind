@@ -22,7 +22,8 @@ const handleApiError = async (response: Response, contextMessage: string): Promi
     }
     const errorMessage = `${contextMessage}. ${errorDetails}`;
     console.error(errorMessage); // Log detailed error
-    return new Error(contextMessage); // Return a simpler error for the UI
+    // Propagate full details so the caller can display/log them
+    return new Error(errorMessage);
 };
 
 
