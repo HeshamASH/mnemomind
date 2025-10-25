@@ -2,7 +2,7 @@
     "rewrites": [
         { "source": "/api/(.*)", "destination": "/api/main.py" }
     ],
-    "installCommand": "pip install fastembed && npm install",
+    "installCommand": "pip3 install fastembed && npm install",
     "buildCommand": "python3 -c \"from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/tmp/fastembed_cache')\" && npm run build",
     "functions": {
         "api/main.py": {
