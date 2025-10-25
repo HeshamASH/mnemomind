@@ -66,7 +66,7 @@ class Source(BaseModel):
 # --- Embedding Model ---
 try:
     # Load the sentence transformer model upon startup
-    embedding_model = TextEmbedding(model_name="BAAI/bge-base-en")
+    embedding_model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
     logging.info("FastEmbed model loaded successfully.")
 except Exception as e:
     logging.error(f"Failed to load FastEmbed model: {e}", exc_info=True)
