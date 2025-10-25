@@ -3,6 +3,7 @@ import json
 import logging # Import logging
 import base64 # Add this import
 from fastapi import FastAPI, HTTPException, Body, Request, Cookie
+from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from elasticsearch import Elasticsearch
@@ -312,7 +313,7 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
                 "field": "chunk_vector", # Ensure this matches your index mapping
                 "query_vector": query_vector,
                 "k": 10,
-                "num_candidates": 100
+                "num_candidates": 50
             },
             "_source": ["file_name", "path", "chunk_text"], # Include chunk_text for fallback
             "highlight": {
@@ -327,11 +328,21 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
             }
         }
 
-        response = es.search(
-            index=ELASTIC_INDEX,
-            body=search_body,
-            request_timeout=30 # Optional: Specific timeout for search
-        )
+        try:
+            response = es.search(
+                index=ELASTIC_INDEX,
+                body=search_body,
+                request_timeout=20  # reduce timeout to avoid serverless kill
+            )
+        except Exception as es_err:
+            # If index not found, return empty list gracefully
+            es_err_str = str(es_err)
+            if 'index_not_found_exception' in es_err_str:
+                logging.warning(f"Index '{ELASTIC_INDEX}' not found. Returning empty results.")
+                return []
+            logging.error(f"Elasticsearch search error: {es_err_str}")
+            raise HTTPException(status_code=502, detail=f"Elasticsearch search error: {es_err_str}")
+
         logging.info(f"Elasticsearch response received for query '{query_text}'. Hits: {len(response.get('hits', {}).get('hits', []))}")
 
         results = []
@@ -436,15 +447,23 @@ async def get_all_files():
             raise HTTPException(status_code=503, detail="File list service unavailable: Elasticsearch not configured or unreachable.")
         logging.info("Fetching list of all indexed files.")
         # Use scroll API if expecting thousands of files, otherwise 'size' is okay for hundreds/few thousands
-        response = es.search(
-            index=ELASTIC_INDEX,
-            body={
-                "size": 1000, # Adjust size limit as needed, or implement scrolling
-                "query": { "match_all": {} },
-                "_source": ["file_name", "path"] # Ensure these fields exist in mapping
-            },
-            request_timeout=30 # Optional timeout
-        )
+        try:
+            response = es.search(
+                index=ELASTIC_INDEX,
+                body={
+                    "size": 100,  # lower size to avoid heavy queries in serverless
+                    "query": { "match_all": {} },
+                    "_source": ["file_name", "path"]
+                },
+                request_timeout=15
+            )
+        except Exception as es_err:
+            es_err_str = str(es_err)
+            if 'index_not_found_exception' in es_err_str:
+                logging.warning(f"Index '{ELASTIC_INDEX}' not found. Returning empty file list.")
+                return []
+            logging.error(f"Elasticsearch list files error: {es_err_str}")
+            raise HTTPException(status_code=502, detail=f"Elasticsearch list files error: {es_err_str}")
 
         # Robust check for response structure
         hits_data = response.get("hits", {}).get("hits", [])
@@ -481,6 +500,41 @@ async def get_all_files():
 @app.get("/")
 async def read_root():
     return {"message": "MnemoMind API is running"}
+
+@app.get("/api/health")
+async def api_health():
+    es = get_es()
+    status = {
+        "env": {
+            "ELASTIC_CLOUD_ID": bool(ELASTIC_CLOUD_ID),
+            "ELASTIC_API_KEY": bool(ELASTIC_API_KEY),
+            "ELASTIC_INDEX": ELASTIC_INDEX or None,
+        },
+        "elasticsearch": {
+            "client_initialized": es is not None,
+            "ping": None,
+            "index_exists": None,
+            "error": None,
+        }
+    }
+    if es is None:
+        return JSONResponse(content=status, status_code=503)
+    try:
+        try:
+            status["elasticsearch"]["ping"] = bool(es.ping())
+        except Exception as e:
+            status["elasticsearch"]["ping"] = False
+            status["elasticsearch"]["error"] = f"ping_error: {e}"
+        try:
+            exists = es.indices.exists(index=ELASTIC_INDEX)
+            status["elasticsearch"]["index_exists"] = bool(exists)
+        except Exception as e:
+            status["elasticsearch"]["index_exists"] = False
+            status["elasticsearch"]["error"] = f"index_check_error: {e}"
+        return JSONResponse(content=status, status_code=200)
+    except Exception as e:
+        status["elasticsearch"]["error"] = str(e)
+        return JSONResponse(content=status, status_code=500)
 
 # --- Uvicorn entry point (if running directly) ---
 # This part is usually handled by your deployment setup (e.g., Vercel doesn't need this)
