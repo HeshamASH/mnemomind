@@ -6,16 +6,6 @@
       "excludeFiles": "node_modules/**,dist/**,__pycache__/**,requirements.txt"
     }
   },
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "buildCommand": "npm run build",
-        "outputDirectory": "dist"
-      }
-    }
-  ],
   "routes": [
     {
       "src": "/api/(.*)",
