@@ -322,7 +322,7 @@ Follow all formatting rules and citation requirements outlined in your primary s
   // Prepare tools if grounding options are enabled
   // --- IMPORTANT: Adjust Tool typing based on your installed @google/generative-ai version ---
   // The exact types (Tool, GoogleSearchTool, FunctionDeclarationTool) might vary slightly.
-  const tools: (Tool | FunctionDeclarationsTool)[] = [];
+  const tools: Tool[] = [];
   if (groundingOptions.useGoogleSearch) {
     // Correct way to specify the Google Search tool
     tools.push({ googleSearch: {} });
@@ -361,7 +361,7 @@ Follow all formatting rules and citation requirements outlined in your primary s
     const genAI = ai.getGenerativeModel({
         model,
         systemInstruction: { role: "system", parts: [{ text: finalSystemInstruction }] }, // Use correct structure
-        tools: tools.length > 0 ? tools as FunctionDeclarationsTool[] | GoogleSearchTool[] : undefined, // Cast tools appropriately
+        tools: tools.length > 0 ? tools : undefined, // Cast tools appropriately
     });
 
     // Generate content stream using the combined final message
