@@ -23,5 +23,10 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/**": {
+      "excludeFiles": "node_modules/**,dist/**,__pycache__/**,requirements.txt"
+    }
+  }
 }
