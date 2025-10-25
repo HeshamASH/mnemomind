@@ -10,10 +10,10 @@
       "DOM.Iterable"
     ],
     "skipLibCheck": true,
-    // Keep types empty or add "vite/client" if needed, but remove "node" if not strictly necessary
-    // for frontend code. If you DO need node types, ensure @types/node is installed.
-    "types": ["vite/client"], // Add vite/client for import.meta.env support
-    "moduleResolution": "bundler", // bundler implies Node-like resolution needed by many libs
+    "types": [
+      "node"
+    ],
+    "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
     "allowJs": true,
@@ -24,16 +24,6 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    // Add strict and other recommended options
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true, // Recommended for compatibility
-    "resolveJsonModule": true // Allow importing JSON files
-  },
-   // Add include/exclude for clarity
-  "include": ["src", "./*.ts", "./*.tsx", "components/**/*.ts", "components/**/*.tsx", "services/**/*.ts", "utils/**/*.ts"], // Adjust paths as needed
-  "exclude": ["node_modules", "dist"]
+    "noEmit": true
+  }
 }

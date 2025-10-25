@@ -1,7 +1,5 @@
 import os
 import json
-import logging # Import logging
-import base64 # Add this import
 from fastapi import FastAPI, HTTPException, Body, Request, Cookie
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -10,11 +8,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
-from sentence_transformers import SentenceTransformer # Added import
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 
 # Construct the path to the .env.local file
 dotenv_path = Path(__file__).resolve().parent.parent / '.env.local'
@@ -25,36 +19,20 @@ ELASTIC_API_KEY = os.getenv("ELASTIC_API_KEY")
 ELASTIC_INDEX = os.getenv("ELASTIC_INDEX")
 
 if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
-    # Use logging instead of print for errors
-    logging.error("Missing required environment variables for Elasticsearch")
     raise RuntimeError("Missing required environment variables for Elasticsearch")
 
-try:
-    es = Elasticsearch(
-        cloud_id=ELASTIC_CLOUD_ID,
-        api_key=ELASTIC_API_KEY,
-        request_timeout=30 # Optional: Set a default timeout
-    )
-    # Verify connection
-    if not es.ping():
-        logging.error("Failed to connect to Elasticsearch.")
-        raise RuntimeError("Failed to connect to Elasticsearch.")
-    logging.info("Successfully connected to Elasticsearch.")
-except Exception as e:
-    logging.error(f"Error connecting to Elasticsearch: {e}", exc_info=True)
-    raise RuntimeError(f"Error connecting to Elasticsearch: {e}")
-
+es = Elasticsearch(
+    cloud_id=ELASTIC_CLOUD_ID,
+    api_key=ELASTIC_API_KEY
+)
 
 app = FastAPI()
 
 # Secret key for signing session data
 # In a production application, this should be a long, random string stored securely
-SECRET_KEY = os.getenv("SECRET_KEY", "your-fallback-secret-key") # Load from env or use fallback
-if SECRET_KEY == "your-fallback-secret-key":
-     logging.warning("Using fallback SECRET_KEY. Set a strong SECRET_KEY environment variable for production.")
+SECRET_KEY = "your-secret-key"
 serializer = URLSafeSerializer(SECRET_KEY)
 
-# --- Pydantic Models ---
 class SearchQuery(BaseModel):
     query: str
 
@@ -63,18 +41,37 @@ class Source(BaseModel):
     fileName: str
     path: str
 
-# --- Embedding Model ---
-try:
-    # Load the sentence transformer model upon startup
-    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    logging.info("Sentence Transformer model loaded successfully.")
-except Exception as e:
-    logging.error(f"Failed to load Sentence Transformer model: {e}", exc_info=True)
-    # Depending on your app's requirements, you might want to raise an error here
-    # raise RuntimeError(f"Failed to load Sentence Transformer model: {e}")
-    embedding_model = None # Set to None if loading fails
+@app.get("/api/auth/google")
+async def auth_google():
+    flow = get_google_flow()
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    response = RedirectResponse(url=authorization_url)
+    response.set_cookie(key="state", value=serializer.dumps(state))
+    return response
 
-# --- Google OAuth Helper ---
+@app.get("/api/auth/google/callback")
+async def auth_google_callback(request: Request, state: str = Cookie(None)):
+    if not state or serializer.loads(state) != request.query_params.get('state'):
+        raise HTTPException(status_code=400, detail="State mismatch")
+
+    flow = get_google_flow()
+    flow.fetch_token(authorization_response=str(request.url))
+    
+    credentials = flow.credentials
+    
+    # Store credentials in a secure, http-only cookie
+    response = RedirectResponse(url="/?source=google-drive") # Redirect to the frontend app
+    response.set_cookie(
+        key="credentials", 
+        value=serializer.dumps(credentials_to_dict(credentials)),
+        httponly=True,
+        samesite='lax'
+    )
+    return response
+
 def credentials_to_dict(credentials):
     return {'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -83,377 +80,178 @@ def credentials_to_dict(credentials):
             'client_secret': credentials.client_secret,
             'scopes': credentials.scopes}
 
-# --- API Endpoints ---
-
-@app.get("/api/auth/google")
-async def auth_google():
-    """Initiates the Google OAuth2 flow."""
-    try:
-        flow = get_google_flow()
-        authorization_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            # prompt='consent' # Optional: Forces consent screen every time
-        )
-        response = RedirectResponse(url=authorization_url)
-        # Sign the state before putting it in the cookie
-        response.set_cookie(key="state", value=serializer.dumps(state), httponly=True, samesite='lax')
-        logging.info("Redirecting user to Google for authentication.")
-        return response
-    except Exception as e:
-        logging.error(f"Error during Google auth initiation: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Could not initiate Google authentication.")
-
-@app.get("/api/auth/google/callback")
-async def auth_google_callback(request: Request, state: str = Cookie(None)):
-    """Handles the callback from Google after user authentication."""
-    logging.info("Received callback from Google.")
-    if not state:
-        logging.error("State cookie missing in Google auth callback.")
-        raise HTTPException(status_code=400, detail="State cookie missing.")
-
-    try:
-        # Unsign the state from the cookie
-        signed_state_from_cookie = serializer.loads(state)
-        state_from_request = request.query_params.get('state')
-
-        if not state_from_request or signed_state_from_cookie != state_from_request:
-            logging.error(f"State mismatch: Cookie='{signed_state_from_cookie}' Request='{state_from_request}'")
-            raise HTTPException(status_code=400, detail="State mismatch.")
-
-        flow = get_google_flow()
-        # Use the full URL string for fetch_token
-        flow.fetch_token(authorization_response=str(request.url))
-        credentials = flow.credentials
-        logging.info("Successfully fetched Google API token.")
-
-        # Store credentials securely in a signed, http-only cookie
-        response = RedirectResponse(url="/?source=google-drive") # Redirect back to the frontend
-        response.set_cookie(
-            key="credentials",
-            value=serializer.dumps(credentials_to_dict(credentials)), # Sign the credentials dict
-            httponly=True,
-            samesite='lax',
-            secure=request.url.scheme == "https", # Use secure=True if served over HTTPS
-            max_age=3600 * 24 * 7 # Example: Cookie lasts for 7 days
-        )
-        # Clear the state cookie
-        response.delete_cookie("state")
-        return response
-    except Exception as e:
-        logging.error(f"Error during Google auth callback: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not process Google callback: {e}")
-
-# Helper to get credentials from cookie
-def get_credentials_from_cookie(credentials_cookie: str | None) -> Credentials | None:
-    if not credentials_cookie:
-        return None
-    try:
-        creds_dict = serializer.loads(credentials_cookie) # Unsign the cookie value
-        return Credentials(**creds_dict)
-    except Exception as e:
-        logging.warning(f"Failed to load credentials from cookie: {e}")
-        return None
-
 @app.get("/api/drive/files")
-async def list_drive_files(credentials: str | None = Cookie(None)):
-    """Lists files (Docs and Sheets) from the user's Google Drive."""
-    creds = get_credentials_from_cookie(credentials)
-    if not creds:
-        raise HTTPException(status_code=401, detail="Not authenticated or invalid credentials.")
+async def list_drive_files(credentials: str = Cookie(None)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        drive_service = get_drive_service(creds)
-        # Updated query to be more specific and exclude trashed files
+        creds_dict = serializer.loads(credentials)
+        creds = Credentials(**creds_dict)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    drive_service = get_drive_service(creds)
+
+    try:
         results = drive_service.files().list(
-            q="trashed=false and (mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.spreadsheet')",
-            pageSize=100, # Adjust as needed, consider pagination for >100 files
-            fields="nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink)").execute() # Added webViewLink
+            q="mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.spreadsheet'",
+            pageSize=100, 
+            fields="nextPageToken, files(id, name, mimeType, modifiedTime)").execute()
         items = results.get('files', [])
-        logging.info(f"Retrieved {len(items)} files from Google Drive.")
         return items
     except Exception as e:
-        logging.error(f"Error listing Google Drive files: {e}", exc_info=True)
-        # Potentially check for specific Google API errors (e.g., expired token)
-        raise HTTPException(status_code=500, detail=f"Could not list Google Drive files: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/drive/files/{file_id}")
-async def get_drive_file(file_id: str, credentials: str | None = Cookie(None)):
-    """Gets the content of a specific Google Drive file (Doc or Sheet)."""
-    creds = get_credentials_from_cookie(credentials)
-    if not creds:
-        raise HTTPException(status_code=401, detail="Not authenticated or invalid credentials.")
+async def get_drive_file(file_id: str, credentials: str = Cookie(None)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        drive_service = get_drive_service(creds)
-        file_metadata = drive_service.files().get(fileId=file_id, fields="mimeType, name").execute() # Added name field
-        mime_type = file_metadata.get('mimeType')
-        file_name = file_metadata.get('name', file_id) # Use name for logging
-        logging.info(f"Fetching content for Google Drive file: '{file_name}' (ID: {file_id}), MIME Type: {mime_type}")
+        creds_dict = serializer.loads(credentials)
+        creds = Credentials(**creds_dict)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        request = None
-        export_mime_type = None
+    drive_service = get_drive_service(creds)
+
+    try:
+        file_metadata = drive_service.files().get(fileId=file_id).execute()
+        mime_type = file_metadata.get('mimeType')
 
         if mime_type == 'application/vnd.google-apps.document':
-            export_mime_type = 'text/plain'
-            request = drive_service.files().export_media(fileId=file_id, mimeType=export_mime_type)
+            request = drive_service.files().export_media(fileId=file_id, mimeType='text/plain')
         elif mime_type == 'application/vnd.google-apps.spreadsheet':
-            export_mime_type = 'text/csv'
-            request = drive_service.files().export_media(fileId=file_id, mimeType=export_mime_type)
-        elif mime_type and ('text/' in mime_type or 'application/json' in mime_type): # Handle plain text like files directly
-             request = drive_service.files().get_media(fileId=file_id)
+            request = drive_service.files().export_media(fileId=file_id, mimeType='text/csv')
         else:
-            logging.warning(f"Unsupported MIME type '{mime_type}' for file ID {file_id}. Cannot fetch content directly.")
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {mime_type}")
-
-        if request:
-            file_content_bytes = request.execute()
-            # Decode bytes to string assuming UTF-8
-            file_content_str = file_content_bytes.decode('utf-8')
-            logging.info(f"Successfully fetched content for Google Drive file: '{file_name}'")
-            return {"content": file_content_str}
-        else:
-             # Should not happen if MIME type check is done correctly, but as a safeguard
-             raise HTTPException(status_code=500, detail="Failed to create download request for the file.")
-
+            request = drive_service.files().get_media(fileId=file_id)
+        
+        file_content = request.execute()
+        return {"content": file_content.decode('utf-8')}
     except Exception as e:
-        logging.error(f"Error getting Google Drive file content for ID {file_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not get Google Drive file content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/sheets/export")
-async def export_to_sheets(request: Request, credentials: str | None = Cookie(None)):
-    """Exports provided table data to a new Google Sheet."""
-    creds = get_credentials_from_cookie(credentials)
-    if not creds:
-        raise HTTPException(status_code=401, detail="Not authenticated or invalid credentials.")
+async def export_to_sheets(request: Request, credentials: str = Cookie(None)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        sheets_service = get_sheets_service(creds)
-        data = await request.json()
-        table_data = data.get('tableData')
+        creds_dict = serializer.loads(credentials)
+        creds = Credentials(**creds_dict)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        if not table_data or not isinstance(table_data, list):
-             raise HTTPException(status_code=400, detail="Invalid or missing 'tableData' in request body.")
+    sheets_service = get_sheets_service(creds)
+    data = await request.json()
+    table_data = data.get('tableData')
 
-        logging.info(f"Attempting to export table data ({len(table_data)} rows) to Google Sheets.")
-
-        spreadsheet_body = {
+    try:
+        spreadsheet = {
             'properties': {
-                'title': 'Exported Data from MnemoMind' # More descriptive title
+                'title': 'Exported Table Data'
             }
         }
-        spreadsheet = sheets_service.spreadsheets().create(
-            body=spreadsheet_body,
-            fields='spreadsheetId,spreadsheetUrl'
-        ).execute()
-        spreadsheet_id = spreadsheet.get('spreadsheetId')
-        spreadsheet_url = spreadsheet.get('spreadsheetUrl')
-        logging.info(f"Created new Google Sheet with ID: {spreadsheet_id}")
-
-
-        update_body = {
+        spreadsheet = sheets_service.spreadsheets().create(body=spreadsheet,
+                                                    fields='spreadsheetId,spreadsheetUrl').execute()
+        
+        body = {
             'values': table_data
         }
-        # Update Sheet1 starting at cell A1
-        update_range = 'Sheet1!A1'
         result = sheets_service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=update_range,
-            valueInputOption='RAW', # Treats input as literal strings
-            body=update_body
-        ).execute()
+            spreadsheetId=spreadsheet.get('spreadsheetId'),
+            range='A1',
+            valueInputOption='RAW',
+            body=body).execute()
 
-        logging.info(f"Successfully updated sheet. Result: {result}")
-        return {"sheetUrl": spreadsheet_url}
-
+        return {"sheetUrl": spreadsheet.get('spreadsheetUrl')}
     except Exception as e:
-        logging.error(f"Error exporting data to Google Sheets: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not export to Google Sheets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+from sentence_transformers import SentenceTransformer
+
+# ... (existing code) ...
+
+embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+
+# ... (existing code) ...
+
+import logging
+
+# ... (existing code) ...
 
 @app.post("/api/search")
-async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for clarity
-    """Searches documents in Elasticsearch using KNN vector search and highlighting."""
-    if not embedding_model:
-        logging.error("Embedding model not loaded, cannot perform search.")
-        raise HTTPException(status_code=503, detail="Search service temporarily unavailable (model loading failed).")
+async def search_documents(query: SearchQuery):
     try:
-        query_text = query_body.query
-        logging.info(f"Received search query: '{query_text}'")
-        query_vector = embedding_model.encode(query_text).tolist()
+        query_vector = embedding_model.encode(query.query).tolist()
 
         search_body = {
             "knn": {
-                "field": "chunk_vector", # Ensure this matches your index mapping
+                "field": "chunk_vector",
                 "query_vector": query_vector,
                 "k": 10,
                 "num_candidates": 100
             },
-            "_source": ["file_name", "path", "chunk_text"], # Include chunk_text for fallback
+            "_source": ["fileName", "path", "chunk_text"],
             "highlight": {
-                "fields": {
-                    "chunk_text": {
-                         "fragment_size": 150,
-                         "number_of_fragments": 1
-                    }
-                 },
-                 "pre_tags": [""], # Optional: Remove default <em> tags if needed
-                 "post_tags": [""]
+                "fields": { "chunk_text": {} },
+                "fragment_size": 150,
+                "number_of_fragments": 1
             }
         }
 
         response = es.search(
             index=ELASTIC_INDEX,
-            body=search_body,
-            request_timeout=30 # Optional: Specific timeout for search
+            body=search_body
         )
-        logging.info(f"Elasticsearch response received for query '{query_text}'. Hits: {len(response.get('hits', {}).get('hits', []))}")
 
         results = []
-        for hit in response.get("hits", {}).get("hits", []):
-            source = hit.get("_source", {})
-            file_name = source.get("file_name", "")
-            path = source.get("path", "")
-
-            # Get highlighted snippet or fall back to original chunk text
-            highlighted_snippet = ""
-            if "highlight" in hit and "chunk_text" in hit["highlight"]:
-                highlighted_snippet = hit["highlight"]["chunk_text"][0]
-            elif "chunk_text" in source:
-                 # Fallback: Truncate original chunk text if no highlight
-                 full_chunk = source["chunk_text"]
-                 highlighted_snippet = (full_chunk[:147] + '...') if len(full_chunk) > 150 else full_chunk
-
-
-            if hit.get("_id") and file_name and highlighted_snippet: # Ensure essential data is present
-                 results.append({
+        for hit in response["hits"]["hits"]:
+            logging.info(f"hit: {hit}")
+            content_snippet = hit.get("highlight", {}).get("chunk_text", [hit["_source"].get("chunk_text", "")])[0]
+            logging.info(f"content_snippet: {content_snippet}")
+            if content_snippet:
+                results.append({
                     "source": {
                         "id": hit["_id"],
-                        "fileName": file_name,
-                        "path": path
+                        "fileName": hit["_source"].get("fileName", ""),
+                        "path": hit["_source"].get("path", "")
                     },
-                    "contentSnippet": highlighted_snippet,
-                    "score": hit.get("_score") # KNN score might be different from traditional _score
-                 })
-            else:
-                 logging.warning(f"Skipping hit due to missing data: ID={hit.get('_id')}, FileName={file_name}, Snippet={highlighted_snippet is not None}")
-
-
-        logging.info(f"Processed {len(results)} results for query '{query_text}'.")
+                    "contentSnippet": content_snippet,
+                    "score": hit["_score"]
+                })
         return results
-
     except Exception as e:
-        logging.error(f"Error during Elasticsearch search for query '{query_body.query}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Search failed: {e}")
-
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files/{file_id}")
 async def get_file_content(file_id: str):
-    """Gets the full content of a file from Elasticsearch based on its ID."""
     try:
-        logging.info(f"Fetching content for file ID: {file_id}")
-        # Fetch the document source including 'content' and 'file_name'
-        response = es.get(
-            index=ELASTIC_INDEX,
-            id=file_id,
-            _source_includes=["content", "file_name"] # Ensure 'content' field is indexed and requested
-        )
-
-        source = response.get("_source", {})
-        content = source.get("content")
-        file_name = source.get("file_name", "") # Get the filename for type checking
-
-        if content is None:
-             logging.warning(f"Content field not found for document ID: {file_id}")
-             raise HTTPException(status_code=404, detail="Content field not found in document.")
-
-        # --- PDF Base64 Handling ---
-        if file_name.lower().endswith(".pdf"):
-            is_base64 = False
-            try:
-                # Attempt to decode to validate if it's base64
-                base64.b64decode(content, validate=True)
-                is_base64 = True
-            except (TypeError, ValueError, Exception): # Catch potential errors during decoding
-                is_base64 = False # Not valid base64 or not a string
-
-            if is_base64:
-                 logging.info(f"Returning base64 content for PDF: {file_name}")
-                 return {"content": content, "isBase64": True}
-            else:
-                 # If PDF content stored is not base64 (e.g., extracted text)
-                 logging.warning(f"Stored content for PDF '{file_name}' is not base64. Returning raw text.")
-                 # Option 1: Raise error - forces correct indexing
-                 # raise HTTPException(status_code=500, detail="Stored PDF content is raw text, cannot display as PDF. Re-index PDFs with base64 content.")
-                 # Option 2: Return raw text (as currently implemented)
-                 return {"content": content, "isBase64": False}
-        else:
-             # For non-PDF files, assume plain text
-             logging.info(f"Returning plain text content for: {file_name}")
-             return {"content": content, "isBase64": False}
-
-    except HTTPException as http_exc:
-        raise http_exc # Re-raise known HTTP exceptions (like 404 from es.get)
+        response = es.get(index=ELASTIC_INDEX, id=file_id)
+        return {"content": response["_source"].get("content", "Content not found")}
     except Exception as e:
-        logging.error(f"Error fetching file content for ID {file_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing file request: {e}")
-
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files")
 async def get_all_files():
-    """Retrieves a list of all indexed files (ID, name, path)."""
     try:
-        logging.info("Fetching list of all indexed files.")
-        # Use scroll API if expecting thousands of files, otherwise 'size' is okay for hundreds/few thousands
         response = es.search(
             index=ELASTIC_INDEX,
             body={
-                "size": 1000, # Adjust size limit as needed, or implement scrolling
+                "size": 1000,
                 "query": { "match_all": {} },
-                "_source": ["file_name", "path"] # Ensure these fields exist in mapping
-            },
-            request_timeout=30 # Optional timeout
+                "_source": ["fileName", "path"]
+            }
         )
-
-        # Robust check for response structure
-        hits_data = response.get("hits", {}).get("hits", [])
-        if not isinstance(hits_data, list):
-             logging.error(f"Unexpected Elasticsearch response structure for get_all_files: {response}")
-             raise HTTPException(status_code=500, detail="Failed to parse file list from storage.")
-
-        results = []
-        for hit in hits_data:
-             source = hit.get("_source")
-             hit_id = hit.get("_id")
-             if source and hit_id:
-                 file_name = source.get("file_name")
-                 path = source.get("path")
-                 if file_name: # Ensure filename is present
-                     results.append({
-                         "id": hit_id,
-                         "fileName": file_name,
-                         "path": path if path is not None else "" # Ensure path is always a string
-                     })
-                 else:
-                      logging.warning(f"Skipping hit {hit_id} due to missing file_name.")
-             else:
-                 logging.warning(f"Skipping hit due to missing _source or _id: {hit}")
-
-
-        logging.info(f"Returning {len(results)} files.")
+        results = [
+            {
+                "id": hit["_id"],
+                "fileName": hit["_source"].get("fileName", ""),
+                "path": hit["_source"].get("path", "")
+            }
+            for hit in response["hits"]["hits"]
+        ]
         return results
     except Exception as e:
-        logging.error(f"Error fetching all files: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error retrieving file list: {e}")
-
-# --- Optional: Add a root endpoint for basic check ---
-@app.get("/")
-async def read_root():
-    return {"message": "MnemoMind API is running"}
-
-# --- Uvicorn entry point (if running directly) ---
-# This part is usually handled by your deployment setup (e.g., Vercel doesn't need this)
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
-
+        raise HTTPException(status_code=500, detail=str(e))
