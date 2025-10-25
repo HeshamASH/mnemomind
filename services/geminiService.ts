@@ -325,7 +325,8 @@ Follow all formatting rules and citation requirements outlined in your primary s
   const tools: Tool[] = [];
   if (groundingOptions.useGoogleSearch) {
     // Correct way to specify the Google Search tool
-    tools.push({ googleSearch: {} });
+    const googleSearchTool: Tool = { googleSearch: {} };
+    tools.push(googleSearchTool);
   }
 
   // Define a simple function declaration for maps (example)
