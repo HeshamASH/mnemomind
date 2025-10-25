@@ -1,4 +1,13 @@
 
+<div align="center">
+  <pre style="font-size: 10px; font-weight: bold; color: #00ff00; line-height: 1.2;">
+█▀▄▀█ █▄ █ █▀▀ █▀▄▀█ █▀█ █▀▄▀█ █ █▄ █ █▀▄
+█ ▀ █ █ ▀█ █▀  █ ▀ █ █ █ █ ▀ █ █ █ ▀█ █ █
+▀   ▀ ▀  ▀ ▀▀▀ ▀   ▀ ▀▀▀ ▀   ▀ ▀ ▀  ▀ ▀▀ 
+  </pre>
+  <h3 style="color: #6a6a6a; margin-top: -10px;">> MnemoMind AI System Online <</h3>
+</div>
+
 # MnemoMind: AI Assistant with Custom Memory
 
 MnemoMind is an intelligent, conversational AI assistant designed to interact with your documents and code. It leverages the power of **Google Gemini** models for understanding and generation, combined with **Elasticsearch** (or client-side search) for efficient retrieval from your custom data sources. 🧠📚
