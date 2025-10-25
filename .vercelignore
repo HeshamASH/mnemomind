@@ -1,0 +1,14 @@
+# Ignore Git history
+.git
+
+# Ignore frontend dependencies from the serverless function bundle
+/node_modules
+
+# Ignore frontend build output from the serverless function bundle
+/dist
+
+# Ignore local development logs
+*.log
+
+# Ignore local environment files (already in .gitignore, but good practice)
+.env*
