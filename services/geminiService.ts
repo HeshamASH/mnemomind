@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, Content, Part, Tool, GenerateContentResponse, FunctionDeclarationTool, FunctionDeclarationsTool, GoogleSearchTool } from "@google/generative-ai";
+import { GoogleGenerativeAI, Content, Part, Tool, GenerateContentResponse, FunctionDeclarationsTool } from "@google/generative-ai";
 import { ElasticResult, Intent, ChatMessage, GroundingOptions, GeolocationPosition } from '../types'; // Added GeolocationPosition
 
 // Function to safely get text from a stream chunk
@@ -322,7 +322,7 @@ Follow all formatting rules and citation requirements outlined in your primary s
   // Prepare tools if grounding options are enabled
   // --- IMPORTANT: Adjust Tool typing based on your installed @google/generative-ai version ---
   // The exact types (Tool, GoogleSearchTool, FunctionDeclarationTool) might vary slightly.
-  const tools: (GoogleSearchTool | FunctionDeclarationTool | Tool)[] = [];
+  const tools: (Tool | FunctionDeclarationsTool)[] = [];
   if (groundingOptions.useGoogleSearch) {
     // Correct way to specify the Google Search tool
     tools.push({ googleSearch: {} });
