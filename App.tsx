@@ -540,7 +540,9 @@ const App: React.FC = () => {
                 // **Refined: Check multiple possible locations for grounding data**
                 const newAttributions =
                     candidateAny?.groundingMetadata?.groundingAttributions || // Preferred structure
-                    candidateAny?.groundingMetadata?.webSearchQueries?.length > 0 ? candidateAny?.groundingMetadata?.groundingAttributions : undefined || // Check if search was used
+                    (candidateAny?.groundingMetadata?.webSearchQueries && candidateAny.groundingMetadata.webSearchQueries.length > 0
+                        ? candidateAny.groundingMetadata.groundingAttributions
+                        : undefined) || // Check if search was used
                     candidateAny?.citationMetadata?.citationSources; // Older structure
 
                 if (Array.isArray(newAttributions) && newAttributions.length > 0) {
