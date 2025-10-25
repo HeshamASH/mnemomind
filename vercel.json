@@ -1,10 +1,12 @@
 {
   "version": 2,
+  "functions": {
+    "api/main.py": {
+      "runtime": "@vercel/python",
+      "excludeFiles": "node_modules/**,dist/**,__pycache__/**,requirements.txt"
+    }
+  },
   "builds": [
-    {
-      "src": "api/main.py",
-      "use": "@vercel/python"
-    },
     {
       "src": "package.json",
       "use": "@vercel/static-build",
@@ -23,10 +25,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "functions": {
-    "api/**": {
-      "excludeFiles": "node_modules/**,dist/**,__pycache__/**,requirements.txt"
-    }
-  }
+  ]
 }
