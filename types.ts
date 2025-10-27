@@ -44,7 +44,8 @@ export enum ResponseType {
 export enum ModelId {
   GEMINI_FLASH_LITE = 'gemini-flash-lite',
   GEMINI_FLASH = 'gemini-flash',
-  GEMINI_PRO = 'gemini-pro'
+  GEMINI_PRO = 'gemini-pro',
+  GEMINI_NANO = 'gemini-nano'
 }
 
 export type Theme = 'light' | 'dark';
@@ -70,6 +71,11 @@ export const MODELS: ModelDefinition[] = [
     id: ModelId.GEMINI_PRO,
     name: '2.5 Pro',
     model: 'gemini-2.5-pro'
+  },
+  {
+    id: ModelId.GEMINI_NANO,
+    name: 'Gemini Nano',
+    model: 'gemini-nano'
   }
 ];
 

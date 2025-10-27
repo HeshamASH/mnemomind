@@ -87,9 +87,11 @@ interface ChatInterfaceProps {
   apiError: string | null;
   setApiError: (error: string | null) => void;
   cloudSearchError: string | null;
+  nanoAvailability: string;
+  nanoDownloadProgress: number | null;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, setApiError, cloudSearchError }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, setApiError, cloudSearchError, nanoAvailability, nanoDownloadProgress }) => {
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -234,6 +236,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
 
       <div className="px-6 py-4 bg-white dark:bg-slate-900">
         <div className="w-full max-w-4xl mx-auto">
+            {nanoDownloadProgress !== null && (
+              <div className="mb-2">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Downloading Gemini Nano...</p>
+                <progress value={nanoDownloadProgress} max="1" className="w-full"></progress>
+              </div>
+            )}
             {apiError && (
                 <div className="relative p-3 mb-3 bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm font-semibold" role="alert">
                     {apiError}
@@ -311,6 +319,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
                             selectedModel={selectedModel}
                             onModelChange={onModelChange}
                             disabled={isLoading}
+                            nanoAvailability={nanoAvailability}
                         />
                          {(input.trim() || attachment) ? (
                             <button

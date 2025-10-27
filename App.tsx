@@ -28,6 +28,8 @@ export interface EditedFileRecord {
   currentContent: string;
 }
 
+import { checkNanoAvailability, createNanoSession, streamNanoResponse } from './services/nanoService';
+
 const App: React.FC = () => {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -55,6 +57,9 @@ const App: React.FC = () => {
   const [cloudSearchError, setCloudSearchError] = useState<string | null>(null);
   const [location, setLocation] = useState<GeolocationPosition | null>(null);
   const [showGoogleDrivePicker, setShowGoogleDrivePicker] = useState<boolean>(false);
+  const [nanoAvailability, setNanoAvailability] = useState<string>('unavailable');
+  const [nanoSession, setNanoSession] = useState<LanguageModelSession | null>(null);
+  const [nanoDownloadProgress, setNanoDownloadProgress] = useState<number | null>(null);
 
   const activeChat = chats.find(c => c.id === activeChatId);
   const groundingOptions = activeChat?.groundingOptions;
@@ -157,6 +162,14 @@ const App: React.FC = () => {
         );
     }
   }, []); // Runs once on mount
+
+  useEffect(() => {
+    const checkNano = async () => {
+      const availability = await checkNanoAvailability();
+      setNanoAvailability(availability);
+    };
+    checkNano();
+  }, []);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -463,6 +476,37 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
               intent = Intent.QUERY_DOCUMENTS;
           }
           
+          if (selectedModel === ModelId.GEMINI_NANO) {
+            if (nanoAvailability === 'unavailable') {
+              addMessageToActiveChat({ role: MessageRole.MODEL, content: "Gemini Nano is not available on this device." });
+              return;
+            }
+
+            let session = nanoSession;
+            if (!session) {
+              setNanoDownloadProgress(0);
+              try {
+                session = await createNanoSession((progress) => {
+                  setNanoDownloadProgress(progress);
+                });
+                if (session) {
+                  setNanoSession(session);
+                } else {
+                  addMessageToActiveChat({ role: MessageRole.MODEL, content: "Failed to create Gemini Nano session." });
+                  return;
+                }
+              } finally {
+                setNanoDownloadProgress(null);
+              }
+            }
+
+            const responseStream = await streamNanoResponse(session, query);
+            for await (const chunk of responseStream) {
+              updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunk }));
+            }
+            return;
+          }
+
           if (attachment?.type.startsWith('image/')) {
               await handleQueryDocuments(newMessages);
           } else {
@@ -678,6 +722,7 @@ file:${file.file_name}".`, editedFile: file };
                 apiError={apiError}
                 setApiError={setApiError}
                 cloudSearchError={cloudSearchError}
+                nanoAvailability={nanoAvailability}
               />
            </ErrorBoundary>
         </main>

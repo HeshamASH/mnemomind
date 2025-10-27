@@ -14,9 +14,10 @@ interface ModelSwitcherProps {
     selectedModel: ModelId;
     onModelChange: (modelId: ModelId) => void;
     disabled?: boolean;
+    nanoAvailability: string;
 }
 
-const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelChange, disabled }) => {
+const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelChange, disabled, nanoAvailability }) => {
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement>(null);
     const selected = MODELS.find(m => m.id === selectedModel);
@@ -51,6 +52,7 @@ const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelCha
                     selectedModel={selectedModel}
                     onModelChange={onModelChange}
                     onClose={() => setIsPopoverOpen(false)}
+                    nanoAvailability={nanoAvailability}
                 />
             )}
         </div>

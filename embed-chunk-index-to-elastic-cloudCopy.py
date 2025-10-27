@@ -116,7 +116,7 @@ if __name__ == "__main__":
     logging.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME} (using FastEmbed)...")
     try:
         # --- CHANGED: Use the correct class name 'TextEmbedding' ---
-        embedding_model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME, cache_dir=os.getenv("FASTEMBED_CACHE_DIR"))
+        embedding_model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME)
         logging.info("Embedding model loaded.")
     except Exception as e:
         logging.error(f"Failed to load FastEmbed model: {e}", exc_info=True)

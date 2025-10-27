@@ -7,8 +7,9 @@ from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
-from google.oauth2.credentials import Credentials
-from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
+from urllib.parse import unquote
+# from google.oauth2.credentials import Credentials
+# from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
 from fastembed import TextEmbedding
 
 # Construct the path to the .env.local file
@@ -42,139 +43,139 @@ class Source(BaseModel):
     file_name: str
     path: str
 
-@app.get("/api/auth/google")
-async def auth_google():
-    flow = get_google_flow()
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true'
-    )
-    response = RedirectResponse(url=authorization_url)
-    response.set_cookie(key="state", value=serializer.dumps(state))
-    return response
+# @app.get("/api/auth/google")
+# async def auth_google():
+#     flow = get_google_flow()
+#     authorization_url, state = flow.authorization_url(
+#         access_type='offline',
+#         include_granted_scopes='true'
+#     )
+#     response = RedirectResponse(url=authorization_url)
+#     response.set_cookie(key="state", value=serializer.dumps(state))
+#     return response
 
-@app.get("/api/auth/google/callback")
-async def auth_google_callback(request: Request, state: str = Cookie(None)):
-    if not state or serializer.loads(state) != request.query_params.get('state'):
-        raise HTTPException(status_code=400, detail="State mismatch")
+# @app.get("/api/auth/google/callback")
+# async def auth_google_callback(request: Request, state: str = Cookie(None)):
+#     if not state or serializer.loads(state) != request.query_params.get('state'):
+#         raise HTTPException(status_code=400, detail="State mismatch")
 
-    flow = get_google_flow()
-    flow.fetch_token(authorization_response=str(request.url))
+#     flow = get_google_flow()
+#     flow.fetch_token(authorization_response=str(request.url))
     
-    credentials = flow.credentials
+#     credentials = flow.credentials
     
-    # Store credentials in a secure, http-only cookie
-    response = RedirectResponse(url="/?source=google-drive") # Redirect to the frontend app
-    response.set_cookie(
-        key="credentials", 
-        value=serializer.dumps(credentials_to_dict(credentials)),
-        httponly=True,
-        samesite='lax'
-    )
-    return response
+#     # Store credentials in a secure, http-only cookie
+#     response = RedirectResponse(url="/?source=google-drive") # Redirect to the frontend app
+#     response.set_cookie(
+#         key="credentials", 
+#         value=serializer.dumps(credentials_to_dict(credentials)),
+#         httponly=True,
+#         samesite='lax'
+#     )
+#     return response
 
-def credentials_to_dict(credentials):
-    return {'token': credentials.token,
-            'refresh_token': credentials.refresh_token,
-            'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
-            'scopes': credentials.scopes}
+# def credentials_to_dict(credentials):
+#     return {'token': credentials.token,
+#             'refresh_token': credentials.refresh_token,
+#             'token_uri': credentials.token_uri,
+#             'client_id': credentials.client_id,
+#             'client_secret': credentials.client_secret,
+#             'scopes': credentials.scopes}
 
-@app.get("/api/drive/files")
-async def list_drive_files(credentials: str = Cookie(None)):
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+# @app.get("/api/drive/files")
+# async def list_drive_files(credentials: str = Cookie(None)):
+#     if not credentials:
+#         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    try:
-        creds_dict = serializer.loads(credentials)
-        creds = Credentials(**creds_dict)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+#     try:
+#         creds_dict = serializer.loads(credentials)
+#         creds = Credentials(**creds_dict)
+#     except Exception:
+#         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    drive_service = get_drive_service(creds)
+#     drive_service = get_drive_service(creds)
 
-    try:
-        results = drive_service.files().list(
-            q="mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.spreadsheet'",
-            pageSize=100, 
-            fields="nextPageToken, files(id, name, mimeType, modifiedTime)").execute()
-        items = results.get('files', [])
-        return items
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+#     try:
+#         results = drive_service.files().list(
+#             q="mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.spreadsheet'",
+#             pageSize=100, 
+#             fields="nextPageToken, files(id, name, mimeType, modifiedTime)").execute()
+#         items = results.get('files', [])
+#         return items
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/drive/files/{file_id}")
-async def get_drive_file(file_id: str, credentials: str = Cookie(None)):
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+# @app.get("/api/drive/files/{file_id}")
+# async def get_drive_file(file_id: str, credentials: str = Cookie(None)):
+#     if not credentials:
+#         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    try:
-        creds_dict = serializer.loads(credentials)
-        creds = Credentials(**creds_dict)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+#     try:
+#         creds_dict = serializer.loads(credentials)
+#         creds = Credentials(**creds_dict)
+#     except Exception:
+#         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    drive_service = get_drive_service(creds)
+#     drive_service = get_drive_service(creds)
 
-    try:
-        file_metadata = drive_service.files().get(fileId=file_id).execute()
-        mime_type = file_metadata.get('mimeType')
+#     try:
+#         file_metadata = drive_service.files().get(fileId=file_id).execute()
+#         mime_type = file_metadata.get('mimeType')
 
-        if mime_type == 'application/vnd.google-apps.document':
-            request = drive_service.files().export_media(fileId=file_id, mimeType='text/plain')
-        elif mime_type == 'application/vnd.google-apps.spreadsheet':
-            request = drive_service.files().export_media(fileId=file_id, mimeType='text/csv')
-        else:
-            request = drive_service.files().get_media(fileId=file_id)
+#         if mime_type == 'application/vnd.google-apps.document':
+#             request = drive_service.files().export_media(fileId=file_id, mimeType='text/plain')
+#         elif mime_type == 'application/vnd.google-apps.spreadsheet':
+#             request = drive_service.files().export_media(fileId=file_id, mimeType='text/csv')
+#         else:
+#             request = drive_service.files().get_media(fileId=file_id)
         
-        file_content = request.execute()
-        return {"content": file_content.decode('utf-8')}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+#         file_content = request.execute()
+#         return {"content": file_content.decode('utf-8')}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/sheets/export")
-async def export_to_sheets(request: Request, credentials: str = Cookie(None)):
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+# @app.post("/api/sheets/export")
+# async def export_to_sheets(request: Request, credentials: str = Cookie(None)):
+#     if not credentials:
+#         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    try:
-        creds_dict = serializer.loads(credentials)
-        creds = Credentials(**creds_dict)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+#     try:
+#         creds_dict = serializer.loads(credentials)
+#         creds = Credentials(**creds_dict)
+#     except Exception:
+#         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    sheets_service = get_sheets_service(creds)
-    data = await request.json()
-    table_data = data.get('tableData')
+#     sheets_service = get_sheets_service(creds)
+#     data = await request.json()
+#     table_data = data.get('tableData')
 
-    try:
-        spreadsheet = {
-            'properties': {
-                'title': 'Exported Table Data'
-            }
-        }
-        spreadsheet = sheets_service.spreadsheets().create(body=spreadsheet,
-                                                    fields='spreadsheetId,spreadsheetUrl').execute()
+#     try:
+#         spreadsheet = {
+#             'properties': {
+#                 'title': 'Exported Table Data'
+#             }
+#         }
+#         spreadsheet = sheets_service.spreadsheets().create(body=spreadsheet,
+#                                                     fields='spreadsheetId,spreadsheetUrl').execute()
         
-        body = {
-            'values': table_data
-        }
-        result = sheets_service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet.get('spreadsheetId'),
-            range='A1',
-            valueInputOption='RAW',
-            body=body).execute()
+#         body = {
+#             'values': table_data
+#         }
+#         result = sheets_service.spreadsheets().values().update(
+#             spreadsheetId=spreadsheet.get('spreadsheetId'),
+#             range='A1',
+#             valueInputOption='RAW',
+#             body=body).execute()
 
-        return {"sheetUrl": spreadsheet.get('spreadsheetUrl')}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+#         return {"sheetUrl": spreadsheet.get('spreadsheetId')}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 
 # ... (existing code) ...
 
-embedding_model = TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=os.getenv("FASTEMBED_CACHE_DIR"))
+embedding_model = TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/tmp/fastembed_cache')
 
 # ... (existing code) ...
 
@@ -185,7 +186,7 @@ import logging
 @app.post("/api/search")
 async def search_documents(query: SearchQuery):
     try:
-        query_vector = embedding_model.encode(query.query).tolist()
+        query_vector = list(embedding_model.embed([query.query]))[0].tolist()
 
         search_body = {
             "knn": {
@@ -229,7 +230,8 @@ async def search_documents(query: SearchQuery):
 @app.get("/api/files/{file_id}")
 async def get_file_content(file_id: str):
     try:
-        response = es.get(index=ELASTIC_INDEX, id=file_id)
+        decoded_file_id = unquote(file_id)
+        response = es.get(index=ELASTIC_INDEX, id=decoded_file_id)
         return {"content": response["_source"].get("content", "Content not found")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -12,9 +12,10 @@ interface ModelSwitcherPopoverProps {
     selectedModel: ModelId;
     onModelChange: (modelId: ModelId) => void;
     onClose: () => void;
+    nanoAvailability: string;
 }
 
-const ModelSwitcherPopover: React.FC<ModelSwitcherPopoverProps> = ({ models, selectedModel, onModelChange, onClose }) => {
+const ModelSwitcherPopover: React.FC<ModelSwitcherPopoverProps> = ({ models, selectedModel, onModelChange, onClose, nanoAvailability }) => {
     
     const handleSelect = (modelId: ModelId) => {
         onModelChange(modelId);
@@ -28,7 +29,8 @@ const ModelSwitcherPopover: React.FC<ModelSwitcherPopoverProps> = ({ models, sel
                     <li key={model.id}>
                         <button
                             onClick={() => handleSelect(model.id)}
-                            className="w-full flex items-center justify-between text-left p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors text-sm font-medium text-slate-700 dark:text-slate-300"
+                            className="w-full flex items-center justify-between text-left p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors text-sm font-medium text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={model.id === ModelId.GEMINI_NANO && nanoAvailability === 'unavailable'}
                         >
                             <span>{model.name}</span>
                             {selectedModel === model.id && <CheckIcon />}
