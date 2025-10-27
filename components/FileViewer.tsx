@@ -8,7 +8,10 @@ declare var hljs: any;
 declare var marked: any;
 
 // Set up the worker for react-pdf
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 interface FileViewerProps {
   file: Source;
