@@ -1,4 +1,5 @@
 import { ElasticResult, Source } from '../types';
+import { blobToDataURL } from '../utils/fileUtils';
 
 const API_BASE_URL = '/api';
 
@@ -74,7 +75,12 @@ export const createDatasetFromSources = async (files: File[]): Promise<ElasticRe
     const dataset: ElasticResult[] = [];
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const content = await file.text(); // Assuming text-based files for now
+        let content: string;
+        if (file.type === 'application/pdf') {
+            content = await blobToDataURL(file);
+        } else {
+            content = await file.text();
+        }
         dataset.push({
             source: {
                 id: `custom-${file.name}-${file.lastModified}`,
