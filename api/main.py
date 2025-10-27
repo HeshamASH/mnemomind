@@ -7,6 +7,7 @@ from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
 from pathlib import Path
 from itsdangerous import URLSafeSerializer
+from urllib.parse import unquote
 # from google.oauth2.credentials import Credentials
 # from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
 from fastembed import TextEmbedding
@@ -229,7 +230,8 @@ async def search_documents(query: SearchQuery):
 @app.get("/api/files/{file_id}")
 async def get_file_content(file_id: str):
     try:
-        response = es.get(index=ELASTIC_INDEX, id=file_id)
+        decoded_file_id = unquote(file_id)
+        response = es.get(index=ELASTIC_INDEX, id=decoded_file_id)
         return {"content": response["_source"].get("content", "Content not found")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
