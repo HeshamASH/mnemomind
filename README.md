@@ -4,7 +4,7 @@
 █ ▀ █ █ ▀█ █▀  █ ▀ █ █ █ █ ▀ █ █ █ ▀█ █ █
 ▀   ▀ ▀  ▀ ▀▀▀ ▀   ▀ ▀▀▀ ▀   ▀ ▀ ▀  ▀ ▀▀ 
   </pre>
-  <h3 style="color: #6a6a6a; margin-top: -10px;">> its ability is to combine results from these different sources [Elastic cloud, Google search, Google Maps, preloaded data source] (you may use one of them or combine two or more) to
+  <h3 style="color: #6a6a6a; margin-top: -10px;">> its ability is to combine results from these different sources [Elastic cloud, Google search, Google Maps, preloaded data source] (use one of them or combine two or more) to
   provide a comprehensive answer. <</h3>
 </div>
 
