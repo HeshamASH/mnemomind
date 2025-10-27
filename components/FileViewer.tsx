@@ -29,6 +29,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
   const isMarkdown = file.file_name.toLowerCase().endsWith('.md');
   const isPdf = file.file_name.toLowerCase().endsWith('.pdf');
   const isTxt = file.file_name.toLowerCase().endsWith('.txt');
+  const isPreloadedPdf = isPdf && content.startsWith('data:application/pdf;base64,');
 
   useEffect(() => {
     if (content === 'Loading...') return;
@@ -90,7 +91,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
                   <span className="w-3 h-3 bg-slate-400 rounded-full inline-block animate-pulse"></span>
                </div>
             ) : isPdf ? (
-              <Document file={`data:application/pdf;base64,${btoa(content)}`} onLoadError={console.error}>
+              <Document file={isPreloadedPdf ? content : `data:application/pdf;base64,${btoa(content)}`} onLoadError={console.error}>
                 <Page pageNumber={1} />
               </Document>
             ) : isMarkdown ? (
