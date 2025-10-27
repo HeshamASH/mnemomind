@@ -166,6 +166,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkNano = async () => {
       const availability = await checkNanoAvailability();
+      console.log('Gemini Nano availability:', availability);
       setNanoAvailability(availability);
     };
     checkNano();

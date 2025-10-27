@@ -17,6 +17,8 @@ interface ModelSwitcherPopoverProps {
 
 const ModelSwitcherPopover: React.FC<ModelSwitcherPopoverProps> = ({ models, selectedModel, onModelChange, onClose, nanoAvailability }) => {
     
+    console.log('nanoAvailability in popover:', nanoAvailability);
+
     const handleSelect = (modelId: ModelId) => {
         onModelChange(modelId);
         onClose();
