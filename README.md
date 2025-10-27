@@ -4,7 +4,8 @@
 █ ▀ █ █ ▀█ █▀  █ ▀ █ █ █ █ ▀ █ █ █ ▀█ █ █
 ▀   ▀ ▀  ▀ ▀▀▀ ▀   ▀ ▀▀▀ ▀   ▀ ▀ ▀  ▀ ▀▀ 
   </pre>
-  <h3 style="color: #6a6a6a; margin-top: -10px;">> It’s a Mind with a custom Memory. <</h3>
+  <h3 style="color: #6a6a6a; margin-top: -10px;">> its ability is to combine results from these different sources [Elastic cloud, Google search, Google Maps, preloaded data source] to
+  provide a comprehensive answer. <</h3>
 </div>
 
 
