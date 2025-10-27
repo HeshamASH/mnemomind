@@ -40,7 +40,7 @@ export const searchCloudDocuments = async (query: string): Promise<ElasticResult
 
 export const getCloudFileContent = async (source: Source): Promise<string> => {
     console.log(`[API] Fetching cloud content for: "${source.file_name}"`);
-    const endpoint = `${API_BASE_URL}/files/${source.id}`;
+    const endpoint = `${API_BASE_URL}/files/${encodeURIComponent(source.id)}`;
 
     try {
         const response = await fetch(endpoint);
