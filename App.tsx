@@ -501,8 +501,13 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
             }
 
             const responseStream = await streamNanoResponse(session, query);
-            for await (const chunk of responseStream) {
-              updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunk }));
+            const reader = responseStream.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                break;
+              }
+              updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + value }));
             }
             return;
           }
@@ -530,7 +535,7 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, allFiles, messages, selectedModel, activeChat, isCodeGenerationEnabled, updateActiveChat, location]);
+  }, [isLoading, allFiles, messages, selectedModel, activeChat, isCodeGenerationEnabled, updateActiveChat, location, nanoAvailability, nanoSession]);
   
   const handleConnectDataSource = useCallback(async (files: File[], dataSource: DataSource) => {
     setIsLoading(true);
@@ -723,6 +728,7 @@ file:${file.file_name}".`, editedFile: file };
                 setApiError={setApiError}
                 cloudSearchError={cloudSearchError}
                 nanoAvailability={nanoAvailability}
+                nanoDownloadProgress={nanoDownloadProgress}
               />
            </ErrorBoundary>
         </main>
