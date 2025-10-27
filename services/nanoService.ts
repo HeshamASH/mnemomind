@@ -3,37 +3,37 @@
 import { ModelId } from '../types';
 
 export const checkNanoAvailability = async (): Promise<string> => {
-  if (window.ai && window.ai.LanguageModel) {
-    try {
-      const availability = await window.ai.LanguageModel.availability();
-      return availability;
-    } catch (error) {
-      console.error('Error checking Gemini Nano availability:', error);
-      return 'unavailable';
-    }
+  if (typeof LanguageModel === 'undefined') {
+    return 'unavailable';
   }
-  return 'unavailable';
+  try {
+    const availability = await LanguageModel.availability();
+    return availability;
+  } catch (error) {
+    console.error('Error checking Gemini Nano availability:', error);
+    return 'unavailable';
+  }
 };
 
 export const createNanoSession = async (
   progressCallback: (progress: number) => void
 ): Promise<LanguageModelSession | null> => {
-  if (window.ai && window.ai.LanguageModel) {
-    try {
-      const session = await window.ai.LanguageModel.create({
-        monitor: (monitor) => {
-          monitor.addEventListener('downloadprogress', (e) => {
-            progressCallback(e.loaded / e.total);
-          });
-        },
-      });
-      return session;
-    } catch (error) {
-      console.error('Error creating Gemini Nano session:', error);
-      return null;
-    }
+  if (typeof LanguageModel === 'undefined') {
+    return null;
   }
-  return null;
+  try {
+    const session = await LanguageModel.create({
+      monitor: (monitor) => {
+        monitor.addEventListener('downloadprogress', (e) => {
+          progressCallback(e.loaded / e.total);
+        });
+      },
+    });
+    return session;
+  } catch (error) {
+    console.error('Error creating Gemini Nano session:', error);
+    return null;
+  }
 };
 
 export const streamNanoResponse = async (
