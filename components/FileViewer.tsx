@@ -28,6 +28,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
   
   const isMarkdown = file.file_name.toLowerCase().endsWith('.md');
   const isPdf = file.file_name.toLowerCase().endsWith('.pdf');
+  const isTxt = file.file_name.toLowerCase().endsWith('.txt');
 
   useEffect(() => {
     if (content === 'Loading...') return;
@@ -42,8 +43,8 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
               hljs.highlightElement(block as HTMLElement);
             }
         });
-    } else if (!isMarkdown && !isPdf && codeRef.current && typeof hljs !== 'undefined') {
-       // For non-markdown, non-pdf, attempt to highlight, but gracefully fallback to plaintext.
+    } else if (!isMarkdown && !isPdf && !isTxt && codeRef.current && typeof hljs !== 'undefined') {
+       // For non-markdown, non-pdf, non-txt, attempt to highlight, but gracefully fallback to plaintext.
        try {
             const extension = file.file_name.split('.').pop() || 'plaintext';
             // Check if the language is supported by highlight.js, otherwise default to plaintext
@@ -62,7 +63,7 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
             }
         }
     }
-  }, [content, isMarkdown, isPdf, file.file_name]);
+  }, [content, isMarkdown, isPdf, isTxt, file.file_name]);
 
   return (
     <div 
@@ -97,6 +98,10 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
                 ref={markdownRef}
                 className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-pre:bg-slate-200 dark:prose-pre:bg-slate-950 prose-pre:p-4 prose-code:text-cyan-600 dark:prose-code:text-cyan-300 prose-code:bg-slate-200 dark:prose-code:bg-slate-700/50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-sm prose-code:font-mono"
                />
+            ) : isTxt ? (
+              <div className="text-base font-sans text-slate-800 dark:text-slate-200 whitespace-pre-wrap p-4">
+                {content}
+              </div>
             ) : (
               <pre className="bg-slate-50 dark:bg-slate-950 rounded-md p-4 overflow-x-auto">
                 <code ref={codeRef} className="text-sm font-mono whitespace-pre-wrap">
