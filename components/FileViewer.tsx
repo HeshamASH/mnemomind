@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Source } from '../types';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -28,6 +28,11 @@ const CloseIcon: React.FC = () => (
 const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
   const codeRef = useRef<HTMLElement>(null);
   const markdownRef = useRef<HTMLDivElement>(null);
+  const [numPages, setNumPages] = useState<number | null>(null);
+
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setNumPages(numPages);
+  }
   
   const isMarkdown = file.file_name.toLowerCase().endsWith('.md');
   const isPdf = file.file_name.toLowerCase().endsWith('.pdf');
@@ -94,8 +99,10 @@ const FileViewer: React.FC<FileViewerProps> = ({ file, content, onClose }) => {
                   <span className="w-3 h-3 bg-slate-400 rounded-full inline-block animate-pulse"></span>
                </div>
             ) : isPdf ? (
-              <Document file={isPreloadedPdf ? content : `data:application/pdf;base64,${btoa(content)}`} onLoadError={console.error}>
-                <Page pageNumber={1} />
+              <Document file={isPreloadedPdf ? content : `data:application/pdf;base64,${btoa(content)}`} onLoadSuccess={onDocumentLoadSuccess} onLoadError={console.error}>
+                {Array.from(new Array(numPages), (el, index) => (
+                  <Page key={`page_${index + 1}`} pageNumber={index + 1} />
+                ))}
               </Document>
             ) : isMarkdown ? (
                <div 
