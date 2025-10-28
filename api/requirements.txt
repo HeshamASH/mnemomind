@@ -10,7 +10,7 @@ google-auth-oauthlib>=1.2.0
 itsdangerous>=2.1.2
 Requests>=2.31.0
 fastembed>=0.1.0
-google-api-python-client
+# google-api-python-client
 google-api-core
 google-auth
 google-generativeai
