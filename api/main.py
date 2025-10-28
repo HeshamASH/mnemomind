@@ -1,7 +1,8 @@
 import os
 import json
+import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Body, Request, Cookie
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
@@ -19,9 +20,12 @@ load_dotenv(dotenv_path=dotenv_path)
 ELASTIC_CLOUD_ID = os.getenv("ELASTIC_CLOUD_ID")
 ELASTIC_API_KEY = os.getenv("ELASTIC_API_KEY")
 ELASTIC_INDEX = os.getenv("ELASTIC_INDEX")
+GEMINI_API_KEY = os.getenv("VITE_API_KEY")
 
-if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX]):
-    raise RuntimeError("Missing required environment variables for Elasticsearch")
+if not all([ELASTIC_CLOUD_ID, ELASTIC_API_KEY, ELASTIC_INDEX, GEMINI_API_KEY]):
+    raise RuntimeError("Missing required environment variables")
+
+genai.configure(api_key=GEMINI_API_KEY)
 
 es = Elasticsearch(
     cloud_id=ELASTIC_CLOUD_ID,
@@ -35,6 +39,10 @@ app = FastAPI()
 SECRET_KEY = "your-secret-key"
 serializer = URLSafeSerializer(SECRET_KEY)
 
+class ChatQuery(BaseModel):
+    query: str
+    model: str
+
 class SearchQuery(BaseModel):
     query: str
 
@@ -42,6 +50,75 @@ class Source(BaseModel):
     id: str
     file_name: str
     path: str
+
+# --- Helper Functions for Gemini API ---
+
+async def get_intent(query: str) -> str:
+    model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
+    prompt = f"""Determine the user's intent. Respond with "chit-chat" or "query_document".
+    User: "Hello" -> "chit-chat"
+    User: "Tell me about the new features" -> "query_document"
+    User: "{query}" ->"""
+    response = await model.generate_content_async(prompt)
+    return response.text.strip()
+
+async def get_keywords(query: str) -> str:
+    model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
+    prompt = f"""Extract keywords from the user's query for a search engine.
+    User: "Tell me about the new features in the latest version" -> "new features latest version"
+    User: "{query}" ->"""
+    response = await model.generate_content_async(prompt)
+    return response.text.strip()
+
+async def stream_gemini_response(model_id: str, prompt: str):
+    model = genai.GenerativeModel(model_id)
+    stream = await model.generate_content_async(prompt, stream=True)
+    for chunk in stream:
+        yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+
+# --- API Endpoints ---
+
+@app.post("/api/chat")
+async def chat_handler(chat_query: ChatQuery):
+    intent = await get_intent(chat_query.query)
+
+    if intent == "chit-chat":
+        async def chit_chat_stream():
+            model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
+            stream = await model.generate_content_async(chat_query.query, stream=True)
+            for chunk in stream:
+                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+        return StreamingResponse(chit_chat_stream(), media_type="text/event-stream")
+
+    elif intent == "query_document":
+        keywords = await get_keywords(chat_query.query)
+        
+        # Perform search on Elasticsearch
+        query_vector = list(embedding_model.embed([keywords]))[0].tolist()
+        search_body = {
+            "knn": {
+                "field": "chunk_vector",
+                "query_vector": query_vector,
+                "k": 10,
+                "num_candidates": 100
+            },
+            "_source": ["chunk_text"]
+        }
+        response = es.search(index=ELASTIC_INDEX, body=search_body)
+        
+        chunks = [hit["_source"]["chunk_text"] for hit in response["hits"]["hits"]]
+        context = "\n".join(chunks)
+
+        prompt = f"""Answer the following query based on the provided context.
+        Context: {context}
+        Query: {chat_query.query}
+        Answer:"""
+        
+        return StreamingResponse(stream_gemini_response(chat_query.model, prompt), media_type="text/event-stream")
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid intent")
+
 
 # @app.get("/api/auth/google")
 # async def auth_google():

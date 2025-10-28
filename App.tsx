@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { ChatMessage, MessageRole, Source, ElasticResult, Intent, CodeSuggestion, ModelId, MODELS, ResponseType, Chat, Theme, Attachment, DataSource, GroundingOptions, DriveFile } from './types';
 import { searchCloudDocuments, getAllCloudFiles, getCloudFileContent, createDatasetFromSources, updateFileContent, searchPreloadedDocuments, getAllPreloadedFiles, getPreloadedFileContent } from './services/elasticService';
-import { streamAiResponse, classifyIntent, streamChitChatResponse, streamCodeGenerationResponse } from './services/geminiService';
+
 import Header from './components/Header';
 import ChatInterface from './components/ChatInterface';
 import FileSearch from './components/FileSearch';
@@ -309,146 +309,39 @@ return `Error: Could not load content for ${source.file_name}.`;
       }
   };
 
-  // --- More Handlers ---
-  
-  const handleQueryDocuments = async (currentMessages: ChatMessage[]) => {
-    if (!activeChat) return;
-
+  const streamChatResponse = async (query: string, model: ModelId) => {
     addMessageToActiveChat({
       role: MessageRole.MODEL,
       content: '',
-      sources: [],
-      groundingChunks: [],
-      responseType: ResponseType.RAG,
-      modelId: selectedModel
+      responseType: ResponseType.RAG, // Or some other type
+      modelId: model
+    });
+    
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, model }),
     });
 
-    const latestQuery = currentMessages[currentMessages.length - 1];
+    if (!response.body) return;
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
 
-
-    const { useCloud, usePreloaded, useGoogleSearch, useGoogleMaps } = activeChat.groundingOptions;
-
-    let elasticResults: ElasticResult[] = [];
-    if (useCloud || usePreloaded) {
-      elasticResults = await searchElastic(latestQuery.content);
-      console.log("elasticResults", elasticResults);
-    }
-
-    // If only Google Search is enabled, then use it.
-    if (useGoogleSearch && !useCloud && !usePreloaded) {
-        console.log("Only Google Search enabled, using Google Search.");
-        const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
-        const responseStream = await streamAiResponse(currentMessages, [], modelToUse, { ...activeChat.groundingOptions, useGoogleSearch: true }, location);
-        updateLastMessageInActiveChat(msg => ({ ...msg, responseType: ResponseType.GOOGLE_SEARCH }));
-        let allGroundingChunks: any[] = [];
-        for await (const chunk of responseStream) {
-            const chunkText = chunk.text;
-            updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
-            
-            const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
-            if (newChunks) {
-                allGroundingChunks.push(...newChunks);
-            }
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      try {
+        const lines = value.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const json = JSON.parse(line.substring(6));
+            updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + json.text }));
+          }
         }
-        const uniqueChunks = Array.from(new Map(allGroundingChunks.map(item => [item.web?.uri || item.maps?.uri, item])).values());
-        updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: uniqueChunks }));
-        return;
-    } else if (elasticResults.length === 0 && (useCloud || usePreloaded)) {
-        // If elastic results are empty, but cloud or preloaded were enabled,
-        // and Google Search is not exclusively enabled, then no results.
-        updateLastMessageInActiveChat(msg => ({ ...msg, content: "I couldn't find any relevant information from your data sources." }));
-        return;
-    }
-    
-    updateLastMessageInActiveChat(msg => ({ ...msg, sources: elasticResults }));
-
-    const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
-    const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, activeChat.groundingOptions, location);
-    
-    let allGroundingChunks: any[] = [];
-    for await (const chunk of responseStream) {
-      const chunkText = chunk.text;
-      updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
-      
-      const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (newChunks) {
-        allGroundingChunks.push(...newChunks);
+      } catch (e) {
+        console.error("Error parsing stream", e);
       }
-    }
-
-    // Deduplicate and set final grounding chunks
-    const uniqueChunks = Array.from(new Map(allGroundingChunks.map(item => [item.web?.uri || item.maps?.uri, item])).values());
-    updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: uniqueChunks }));
-  };
-  
-  const handleChitChat = async (currentMessages: ChatMessage[]) => {
-    addMessageToActiveChat({
-      role: MessageRole.MODEL,
-      content: '',
-      responseType: ResponseType.CHIT_CHAT,
-      modelId: selectedModel
-    });
-    const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
-    const responseStream = await streamChitChatResponse(currentMessages, modelToUse);
-    for await (const chunk of responseStream) {
-      const chunkText = chunk.text;
-      updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
-    }
-  };
-
-  const handleCodeGeneration = async (currentMessages: ChatMessage[]) => {
-    addMessageToActiveChat({
-      role: MessageRole.MODEL,
-      content: 'Thinking about the file...', 
-      responseType: ResponseType.CODE_GENERATION,
-      modelId: selectedModel
-    });
-
-    const latestQuery = currentMessages[currentMessages.length - 1].content;
-    const searchResults = await searchElastic(latestQuery);
-    
-    const editableSearchResults = searchResults.filter(r => {
-        const extension = r.source.file_name.split('.').pop()?.toLowerCase();
-        return extension && EDITABLE_EXTENSIONS.includes(extension);
-    });
-    
-    if (editableSearchResults.length === 0) {
-        updateLastMessageInActiveChat(msg => ({ ...msg, content: "I couldn't find any editable files relevant to your request. I can only edit text-based source code and document files, not PDFs or other binary formats." }));
-        return;
-    }
-    
-    const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
-    const responseStream = await streamCodeGenerationResponse(currentMessages, editableSearchResults, modelToUse);
-    let responseJsonText = '';
-    for await (const chunk of responseStream) {
-        responseJsonText += chunk.text;
-    }
-
-    try {
-        const responseObject = JSON.parse(responseJsonText);
-        if (responseObject.error) throw new Error(responseObject.error);
-        
-        const fullPath = responseObject.filePath;
-        const file = allFiles.find(f => `${f.path}/${f.file_name}` === fullPath);
-        
-        if (!file) throw new Error(`The model suggested editing a file I couldn't find: ${fullPath}`);
-
-        const originalContent = await getFileContent(file);
-        if (originalContent === null) throw new Error(`Could not fetch original content for ${file.file_name}.`);
-
-        const suggestion: CodeSuggestion = {
-            file,
-            thought: responseObject.thought,
-            originalContent,
-            suggestedContent: responseObject.newContent,
-            status: 'pending',
-        };
-        updateLastMessageInActiveChat(msg => ({ ...msg, content: `I have a suggestion for 
-file:${file.file_name}". Here are the changes:`, suggestion }));
-    } catch (e) {
-        console.error("Code generation parsing error:", e);
-        const errorMessage = e instanceof Error ? e.message : "Sorry, I couldn't generate the edit correctly.";
-        updateLastMessageInActiveChat(msg => ({ ...msg, content: errorMessage }));
     }
   };
 
@@ -458,7 +351,6 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
     setApiError(null);
     
     const userMessage: ChatMessage = { role: MessageRole.USER, content: query, attachment };
-    const newMessages = [...messages, userMessage];
     updateActiveChat(chat => ({
       ...chat, 
       messages: [...chat.messages, userMessage],
@@ -466,69 +358,43 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
     }));
     
     try {
-      const { useCloud, usePreloaded, useGoogleSearch, useGoogleMaps } = activeChat.groundingOptions;
-      const isGrounded = useCloud || usePreloaded || useGoogleSearch || useGoogleMaps;
+      if (selectedModel === ModelId.GEMINI_NANO) {
+        if (nanoAvailability === 'unavailable') {
+          addMessageToActiveChat({ role: MessageRole.MODEL, content: "Gemini Nano is not available on this device." });
+          return;
+        }
 
-      if (isGrounded || attachment) {
-          const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
-          let intent = await classifyIntent(query, modelToUse);
-
-          if (intent === Intent.GENERATE_CODE && !isCodeGenerationEnabled) {
-              intent = Intent.QUERY_DOCUMENTS;
-          }
-          
-          if (selectedModel === ModelId.GEMINI_NANO) {
-            if (nanoAvailability === 'unavailable') {
-              addMessageToActiveChat({ role: MessageRole.MODEL, content: "Gemini Nano is not available on this device." });
+        let session = nanoSession;
+        if (!session) {
+          setNanoDownloadProgress(0);
+          try {
+            session = await createNanoSession((progress) => {
+              setNanoDownloadProgress(progress);
+            });
+            if (session) {
+              setNanoSession(session);
+            } else {
+              addMessageToActiveChat({ role: MessageRole.MODEL, content: "Failed to create Gemini Nano session." });
               return;
             }
-
-            let session = nanoSession;
-            if (!session) {
-              setNanoDownloadProgress(0);
-              try {
-                session = await createNanoSession((progress) => {
-                  setNanoDownloadProgress(progress);
-                });
-                if (session) {
-                  setNanoSession(session);
-                } else {
-                  addMessageToActiveChat({ role: MessageRole.MODEL, content: "Failed to create Gemini Nano session." });
-                  return;
-                }
-              } finally {
-                setNanoDownloadProgress(null);
-              }
-            }
-
-            const responseStream = await streamNanoResponse(session, query);
-            const reader = responseStream.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                break;
-              }
-              updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + value }));
-            }
-            return;
+          } finally {
+            setNanoDownloadProgress(null);
           }
+        }
 
-          if (attachment?.type.startsWith('image/')) {
-              await handleQueryDocuments(newMessages);
-          } else {
-              switch (intent) {
-                case Intent.GENERATE_CODE: await handleCodeGeneration(newMessages); break;
-                case Intent.CHIT_CHAT: 
-                    // If any grounding is on, treat chit-chat as a grounded query
-                    if (usePreloaded || useGoogleSearch || useGoogleMaps) await handleQueryDocuments(newMessages); 
-                    else await handleChitChat(newMessages);
-                    break;
-                default: await handleQueryDocuments(newMessages); break;
-              }
+        const responseStream = await streamNanoResponse(session, query);
+        const reader = responseStream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
           }
-      } else {
-        await handleChitChat(newMessages);
+          updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + value }));
+        }
+        return;
       }
+      await streamChatResponse(query, selectedModel);
+
     } catch (error) {
       console.error('Error processing message:', error);
       const errorMessageContent = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -536,7 +402,7 @@ file:${file.file_name}". Here are the changes:`, suggestion }));
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, allFiles, messages, selectedModel, activeChat, isCodeGenerationEnabled, updateActiveChat, location, nanoAvailability, nanoSession]);
+  }, [isLoading, messages, selectedModel, activeChat, isCodeGenerationEnabled, updateActiveChat, location, nanoAvailability, nanoSession]);
   
   const handleConnectDataSource = useCallback(async (files: File[], dataSource: DataSource) => {
     setIsLoading(true);
