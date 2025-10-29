@@ -1,0 +1,18 @@
+<mat-toolbar color="primary">
+  <button mat-icon-button (click)="onToggleSidebar()">
+    <mat-icon>menu</mat-icon>
+  </button>
+  <span>MnemoMind</span>
+  <span class="spacer"></span>
+  <div *ngIf="activeDataSource">
+    <span>{{ activeDataSource.name }} ({{ activeDataSource.fileCount }})</span>
+  </div>
+  <button mat-button (click)="onConnectDataSource()">Connect Data Source</button>
+  <button mat-icon-button (click)="onToggleFileSearch()">
+    <mat-icon>search</mat-icon>
+  </button>
+  <button mat-icon-button (click)="onToggleEditedFiles()">
+    <mat-icon>edit</mat-icon>
+  </button>
+  <app-theme-switcher [theme]="theme" (themeChange)="setTheme($event)"></app-theme-switcher>
+</mat-toolbar>

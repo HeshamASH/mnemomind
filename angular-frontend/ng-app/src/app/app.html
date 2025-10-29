@@ -1,0 +1,20 @@
+<div [ngClass]="theme">
+  <mat-sidenav-container class="h-screen">
+    <mat-sidenav [opened]="isSidebarOpen" mode="side">
+      <app-chat-history (newChat)="newChat()"></app-chat-history>
+    </mat-sidenav>
+    <mat-sidenav-content>
+      <app-header
+        [theme]="theme"
+        [activeDataSource]="activeDataSource"
+        (toggleSidebar)="toggleSidebar()"
+        (toggleFileSearch)="toggleFileSearch()"
+        (toggleEditedFiles)="toggleEditedFiles()"
+        (connectDataSource)="connectDataSource()"
+        (themeChange)="setTheme($event)"
+      ></app-header>
+      <app-welcome-block *ngIf="!activeDataSource" (connectDataSource)="connectDataSource()"></app-welcome-block>
+      <app-chat-interface *ngIf="activeDataSource"></app-chat-interface>
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+</div>

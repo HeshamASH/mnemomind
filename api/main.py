@@ -3,7 +3,7 @@ import json
 import logging # Import logging
 import base64 # Add this import
 from fastapi import FastAPI, HTTPException, Body, Request, Cookie
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from elasticsearch import Elasticsearch
@@ -13,6 +13,7 @@ from itsdangerous import URLSafeSerializer
 from google.oauth2.credentials import Credentials
 from fastembed import TextEmbedding
 from api.google_drive import get_google_flow, get_drive_service, get_sheets_service
+from api.gemini import classify_intent, stream_chit_chat_response, stream_ai_response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -75,6 +76,18 @@ class Source(BaseModel):
     fileName: str
     path: str
 
+class GeminiRequest(BaseModel):
+    history: list
+    model: str
+
+class GeminiChitChatRequest(GeminiRequest):
+    pass
+
+class GeminiAiRequest(GeminiRequest):
+    context: list
+    grounding_options: dict
+
+
 # --- Embedding Model (FastEmbed) ---
 embedding_model = None  # type: ignore
 
@@ -101,6 +114,20 @@ def credentials_to_dict(credentials):
             'scopes': credentials.scopes}
 
 # --- API Endpoints ---
+
+@app.post("/api/gemini/classify-intent")
+async def classify_intent_endpoint(request: Request):
+    body = await request.json()
+    return JSONResponse(content={"intent": classify_intent(body['query'], body['model'])})
+
+@app.post("/api/gemini/stream-chit-chat")
+async def stream_chit_chat_endpoint(request: GeminiChitChatRequest):
+    return StreamingResponse(stream_chit_chat_response(request.history, request.model))
+
+@app.post("/api/gemini/stream-ai-response")
+async def stream_ai_response_endpoint(request: GeminiAiRequest):
+    return StreamingResponse(stream_ai_response(request.history, request.context, request.model, request.grounding_options))
+
 
 @app.get("/api/auth/google")
 async def auth_google():
@@ -348,7 +375,7 @@ async def search_documents(query_body: SearchQuery = Body(...)): # Use Body for 
         results = []
         for hit in response.get("hits", {}).get("hits", []):
             source = hit.get("_source", {})
-            file_name = source.get("file_name", "")
+            file_.name = source.get("file_name", "")
             path = source.get("path", "")
 
             # Get highlighted snippet or fall back to original chunk text
@@ -541,4 +568,3 @@ async def api_health():
 # if __name__ == "__main__":
 #     import uvicorn
 #     uvicorn.run(app, host="0.0.0.0", port=8000)
-
