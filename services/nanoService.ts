@@ -23,6 +23,7 @@ export const createNanoSession = async (
   }
   try {
     const session = await LanguageModel.create({
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
       monitor: (monitor) => {
         monitor.addEventListener('downloadprogress', (e) => {
           progressCallback(e.loaded / e.total);
@@ -38,10 +39,11 @@ export const createNanoSession = async (
 
 export const streamNanoResponse = async (
   session: LanguageModelSession,
-  prompt: string
+  prompt: string,
+  signal: AbortSignal
 ): Promise<ReadableStream<string>> => {
   try {
-    const stream = session.promptStreaming(prompt);
+    const stream = session.promptStreaming(prompt, { signal });
     return stream;
   } catch (error) {
     console.error('Error streaming Gemini Nano response:', error);

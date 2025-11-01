@@ -54,28 +54,38 @@ export interface ModelDefinition {
   id: ModelId;
   name: string;
   model: string;
+  group: string;
+  description: string;
 }
 
 export const MODELS: ModelDefinition[] = [
   {
     id: ModelId.GEMINI_FLASH_LITE,
     name: '2.5 Flash Lite',
-    model: 'gemini-flash-lite-latest'
+    model: 'gemini-flash-lite-latest',
+    group: 'Fast all-round help',
+    description: 'Gemini-flash-lite-latest'
   },
   {
     id: ModelId.GEMINI_FLASH,
     name: '2.5 Flash',
-    model: 'gemini-2.5-flash'
+    model: 'gemini-2.5-flash',
+    group: 'Fast all-round help',
+    description: '2.5 Flash'
   },
   {
     id: ModelId.GEMINI_PRO,
     name: '2.5 Pro',
-    model: 'gemini-2.5-pro'
+    model: 'gemini-2.5-pro',
+    group: 'Reasoning, maths and code',
+    description: '2.5 Pro'
   },
   {
     id: ModelId.GEMINI_NANO,
     name: 'Gemini Nano',
-    model: 'gemini-nano'
+    model: 'gemini-nano',
+    group: 'On-device',
+    description: 'Local on-device model'
   }
 ];
 

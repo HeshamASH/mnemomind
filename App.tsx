@@ -1,8 +1,8 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ChatMessage, MessageRole, Source, ElasticResult, Intent, CodeSuggestion, ModelId, MODELS, ResponseType, Chat, Theme, Attachment, DataSource, GroundingOptions, DriveFile } from './types';
 import { searchCloudDocuments, getAllCloudFiles, getCloudFileContent, createDatasetFromSources, updateFileContent, searchPreloadedDocuments, getAllPreloadedFiles, getPreloadedFileContent } from './services/elasticService';
-
+import { streamAiResponse, classifyIntent, streamChitChatResponse, streamCodeGenerationResponse, rewriteQueryForSearch, getSystemInstruction } from './services/geminiService';
 import Header from './components/Header';
 import ChatInterface from './components/ChatInterface';
 import FileSearch from './components/FileSearch';
@@ -50,9 +50,11 @@ const App: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<Source | null>(null);
   const [selectedFileContent, setSelectedFileContent] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<ModelId>(ModelId.GEMINI_FLASH_LITE);
+  const [selectedTeamModel, setSelectedTeamModel] = useState<ModelId>(ModelId.GEMINI_FLASH_LITE);
   const [diffViewerRecord, setDiffViewerRecord] = useState<EditedFileRecord | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCodeGenerationEnabled, setIsCodeGenerationEnabled] = useState<boolean>(true);
+  const [useRewriter, setUseRewriter] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [cloudSearchError, setCloudSearchError] = useState<string | null>(null);
   const [location, setLocation] = useState<GeolocationPosition | null>(null);
@@ -60,6 +62,9 @@ const App: React.FC = () => {
   const [nanoAvailability, setNanoAvailability] = useState<string>('unavailable');
   const [nanoSession, setNanoSession] = useState<LanguageModelSession | null>(null);
   const [nanoDownloadProgress, setNanoDownloadProgress] = useState<number | null>(null);
+  const stopController = React.useRef(new AbortController());
+  const [pendingMessage, setPendingMessage] = useState<{ query: string; attachment?: Attachment } | null>(null);
+  const previousGroundingOptions = useRef<GroundingOptions | null>(null);
 
   const activeChat = chats.find(c => c.id === activeChatId);
   const groundingOptions = activeChat?.groundingOptions;
@@ -70,7 +75,6 @@ const App: React.FC = () => {
     ));
   }, [activeChatId]);
 
-  // --- Handlers ---
   const handleNewChat = useCallback(() => {
     const newChat: Chat = {
       id: `chat_${Date.now()}`,
@@ -91,17 +95,15 @@ const App: React.FC = () => {
     setEditedFiles(new Map());
     setCloudSearchError(null);
     setIsCodeGenerationEnabled(false);
+    return newChat.id;
   }, []);
-
-  // --- Effects ---
 
   useEffect(() => {
     try {
       const savedState = localStorage.getItem(HISTORY_KEY);
       if (savedState) {
-        const { chats: savedChats, activeChatId: savedActiveChatId, model: savedModel } = JSON.parse(savedState);
+        const { chats: savedChats, model: savedModel } = JSON.parse(savedState);
         const restoredChats = (savedChats || []).map((chat: any) => {
-            // Migration logic for old chat structure
             const groundingOptions = chat.groundingOptions || {
                 useCloud: chat.groundingSource === 'elastic_cloud' || chat.groundingSource === 'hybrid' || (!chat.dataSource && chat.groundingSource !== 'preloaded'),
                 usePreloaded: chat.groundingSource === 'preloaded' || chat.groundingSource === 'hybrid' || (!!chat.dataSource),
@@ -115,22 +117,13 @@ const App: React.FC = () => {
             };
         });
         setChats(restoredChats);
-        setActiveChatId(savedActiveChatId || null);
         setSelectedModel(savedModel || ModelId.GEMINI_FLASH_LITE);
-        if (!savedActiveChatId && restoredChats.length > 0) {
-            setActiveChatId(restoredChats[0].id);
-        } else if (restoredChats.length === 0) {
-           handleNewChat();
-        }
-      } else {
-        handleNewChat();
       }
     } catch (error) {
       console.error("Failed to parse state from localStorage", error);
-      handleNewChat();
     }
-  // handleNewChat is memoized and has no dependencies, so this effect runs only once on mount.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Set active chat to null on initial load to show welcome screen
+    setActiveChatId(null);
   }, []);
 
   useEffect(() => {
@@ -161,7 +154,7 @@ const App: React.FC = () => {
             }
         );
     }
-  }, []); // Runs once on mount
+  }, []);
 
   useEffect(() => {
     const checkNano = async () => {
@@ -182,62 +175,55 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const fetchFiles = async () => {
-      if (!activeChat || !groundingOptions) {
+      if (!activeChat) {
         setAllFiles([]);
         return;
       }
 
-      // Start with preloaded files if the option is active
-      let preloadedFiles = groundingOptions.usePreloaded
-        ? getAllPreloadedFiles(activeChat.dataset)
-        : [];
+      const { usePreloaded, useCloud } = activeChat.groundingOptions;
+      const filesMap = new Map<string, Source>();
+      const getFileKey = (file: Source) => `${file.path}/${file.file_name}`;
 
-      // If cloud is not enabled, just set preloaded files and we're done.
-      if (!groundingOptions.useCloud) {
-        setAllFiles(preloadedFiles);
-        setCloudSearchError(null); // Clear any previous cloud errors
-        return;
+      if (usePreloaded) {
+        const preloadedFiles = getAllPreloadedFiles(activeChat.dataset);
+        preloadedFiles.forEach(file => {
+          filesMap.set(getFileKey(file), file);
+        });
       }
-      
-      // If cloud is enabled, try to fetch them.
-      try {
-        setCloudSearchError(null); // Reset error before the attempt
-        const cloudFiles = await getAllCloudFiles();
-              // Filter out preloaded files that are already present in cloudFiles (by name and path)
-              preloadedFiles = preloadedFiles.filter(preloadedFile =>
-                !cloudFiles.some(cloudFile =>
-                  cloudFile.file_name === preloadedFile.file_name && cloudFile.path === preloadedFile.path
-                )
-              );
-        
-              const combined = [...cloudFiles, ...preloadedFiles];
-              const uniqueFiles = Array.from(new Map(combined.map(file => [file.id, file])).values());
-              setAllFiles(uniqueFiles);      } catch (error) {
-        console.error("Error fetching cloud files:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to fetch cloud files.";
-        setCloudSearchError(errorMessage);
 
-        // If fetching fails, update UI to reflect this
-        setAllFiles(preloadedFiles); // Fallback to only preloaded files
-        updateActiveChat(chat => ({
-          ...chat,
-          // Turn off the cloud option for this chat since it's failing
-          groundingOptions: { ...chat.groundingOptions, useCloud: false }
-        }));
+      if (useCloud) {
+        try {
+          setCloudSearchError(null);
+          const cloudFiles = await getAllCloudFiles();
+          cloudFiles.forEach(file => {
+            const key = getFileKey(file);
+            if (!filesMap.has(key)) {
+              filesMap.set(key, file);
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching cloud files:", error);
+          const errorMessage = error instanceof Error ? error.message : "Failed to fetch cloud files.";
+          setCloudSearchError(errorMessage);
+          updateActiveChat(chat => ({
+            ...chat,
+            groundingOptions: { ...chat.groundingOptions, useCloud: false }
+          }));
+        }
       }
+
+      setAllFiles(Array.from(filesMap.values()));
     };
 
     fetchFiles();
     
-    // Side-effect to ensure preloaded is off if there's no data source
     if (activeChat && !activeChat.dataSource && groundingOptions?.usePreloaded) {
         updateActiveChat(chat => ({
             ...chat,
             groundingOptions: { ...chat.groundingOptions, usePreloaded: false }
         }));
     }
-  }, [activeChatId, activeChat?.dataSource, groundingOptions?.useCloud, groundingOptions?.usePreloaded, updateActiveChat, activeChat, groundingOptions]);
-
+  }, [activeChatId, activeChat?.dataSource, groundingOptions?.useCloud, groundingOptions?.usePreloaded, updateActiveChat]);
 
   const messages = activeChat?.messages || [];
 
@@ -271,7 +257,7 @@ const App: React.FC = () => {
     try {
       const searchResults = await Promise.all(searchPromises);
       const fusedResults = reciprocalRankFusion(searchResults);
-      return fusedResults.slice(0, 10);
+      return fusedResults;
     } catch (error) {
       console.error("Search failed:", error);
       setCloudSearchError(error instanceof Error ? error.message : "Failed to fetch from cloud.");
@@ -296,11 +282,9 @@ return `Error: Could not load content for ${source.file_name}.`;
         }
       }
 
-      // Check if the file is from the preloaded dataset first.
       if (source.id.startsWith('custom-')) {
           return getPreloadedFileContent(source, activeChat.dataset);
       }
-      // Otherwise, assume it's from the cloud.
       try {
         return await getCloudFileContent(source);
       } catch (error) {
@@ -308,56 +292,43 @@ return `Error: Could not load content for ${source.file_name}.`;
         return `Error: Could not load content for ${source.file_name}.`;
       }
   };
-
-  const streamChatResponse = async (query: string, model: ModelId) => {
-    addMessageToActiveChat({
-      role: MessageRole.MODEL,
-      content: '',
-      responseType: ResponseType.RAG, // Or some other type
-      modelId: model
-    });
-    
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query, model }),
-    });
-
-    if (!response.body) return;
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      try {
-        const lines = value.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const json = JSON.parse(line.substring(6));
-            updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + json.text }));
-          }
-        }
-      } catch (e) {
-        console.error("Error parsing stream", e);
-      }
-    }
-  };
-
-  const handleSendMessage = useCallback(async (query: string, attachment?: Attachment) => {
+  
+  const doSendMessage = useCallback(async (query: string, attachment?: Attachment) => {
     if (!query.trim() || isLoading || !activeChat) return;
+
+    stopController.current = new AbortController();
     setIsLoading(true);
     setApiError(null);
-    
+
     const userMessage: ChatMessage = { role: MessageRole.USER, content: query, attachment };
     updateActiveChat(chat => ({
-      ...chat, 
+      ...chat,
       messages: [...chat.messages, userMessage],
       title: chat.messages.length === 0 ? query.substring(0, 30) : chat.title
     }));
-    
+
+    const newMessages = [...activeChat.messages, userMessage];
+
     try {
+       if (query.toLowerCase().trim() === 'explain this project') {
+            await handleQueryDocuments(newMessages, "Explain the MnemoMind RAG application project");
+            return;
+        }
+
+      const { useCloud, usePreloaded, useGoogleSearch, useGoogleMaps } = activeChat.groundingOptions;
+      const isGrounded = useCloud || usePreloaded || useGoogleSearch || useGoogleMaps;
+
+      let intent: Intent;
+      if (!isGrounded && !attachment) {
+        intent = Intent.CHIT_CHAT;
+      } else {
+        intent = await classifyIntent(query);
+      }
+
+      if (intent === Intent.GENERATE_CODE && !isCodeGenerationEnabled) {
+        intent = Intent.QUERY_DOCUMENTS;
+      }
+
       if (selectedModel === ModelId.GEMINI_NANO) {
         if (nanoAvailability === 'unavailable') {
           addMessageToActiveChat({ role: MessageRole.MODEL, content: "Gemini Nano is not available on this device." });
@@ -366,35 +337,66 @@ return `Error: Could not load content for ${source.file_name}.`;
 
         let session = nanoSession;
         if (!session) {
-          setNanoDownloadProgress(0);
-          try {
-            session = await createNanoSession((progress) => {
-              setNanoDownloadProgress(progress);
-            });
-            if (session) {
-              setNanoSession(session);
-            } else {
-              addMessageToActiveChat({ role: MessageRole.MODEL, content: "Failed to create Gemini Nano session." });
-              return;
+            setNanoDownloadProgress(0);
+            try {
+                session = await createNanoSession(setNanoDownloadProgress);
+                if (session) setNanoSession(session);
+                else {
+                    addMessageToActiveChat({ role: MessageRole.MODEL, content: "Failed to create Gemini Nano session." });
+                    return;
+                }
+            } finally {
+                setNanoDownloadProgress(null);
             }
-          } finally {
-            setNanoDownloadProgress(null);
-          }
         }
 
-        const responseStream = await streamNanoResponse(session, query);
+        let promptForNano = '';
+        const hasDataSource = activeChat.groundingOptions.useCloud || activeChat.groundingOptions.usePreloaded;
+        const systemInstruction = getSystemInstruction(hasDataSource);
+
+        if (intent === Intent.QUERY_DOCUMENTS) {
+            const rewrittenQuery = useRewriter ? await rewriteQueryForSearch(query) : query;
+            const elasticResults = await searchElastic(rewrittenQuery);
+
+            if (elasticResults.length > 0) {
+                const contextString = elasticResults.map(result => `File: ${result.source.path}/${result.source.file_name}\n\n\`\`\`\n${result.contentSnippet.trim()}\n\`\`\``).join('\n---\n');
+                promptForNano = `${systemInstruction}\n\n**CONTEXT:**\n${contextString}\n\n**QUESTION:**\n${query}`;
+                addMessageToActiveChat({ role: MessageRole.MODEL, content: '', responseType: ResponseType.RAG, modelId: selectedModel, sources: elasticResults });
+            } else {
+                addMessageToActiveChat({ role: MessageRole.MODEL, content: "I couldn't find any relevant information to answer that.", responseType: ResponseType.RAG, modelId: selectedModel });
+                return;
+            }
+        } else {
+            promptForNano = `${systemInstruction}\n\n**USER'S QUESTION:**\n${query}`;
+            addMessageToActiveChat({ role: MessageRole.MODEL, content: '', responseType: ResponseType.CHIT_CHAT, modelId: selectedModel });
+        }
+
+        const responseStream = await streamNanoResponse(session, promptForNano, stopController.current.signal);
         const reader = responseStream.getReader();
         while (true) {
           const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
+          if (done) break;
           updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + value }));
         }
         return;
       }
-      await streamChatResponse(query, selectedModel);
 
+      if (intent === Intent.CHIT_CHAT) {
+        await handleChitChat(newMessages);
+      } else if (attachment?.type.startsWith('image/')) {
+          await handleQueryDocuments(newMessages);
+      } else {
+          switch (intent) {
+              case Intent.GENERATE_CODE:
+                  await handleCodeGeneration(newMessages);
+                  break;
+              case Intent.QUERY_DOCUMENTS:
+              default:
+                  const rewrittenQuery = useRewriter ? await rewriteQueryForSearch(query) : query;
+                  await handleQueryDocuments(newMessages, rewrittenQuery);
+                  break;
+          }
+      }
     } catch (error) {
       console.error('Error processing message:', error);
       const errorMessageContent = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -402,7 +404,181 @@ return `Error: Could not load content for ${source.file_name}.`;
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, messages, selectedModel, activeChat, isCodeGenerationEnabled, updateActiveChat, location, nanoAvailability, nanoSession]);
+  }, [isLoading, allFiles, messages, selectedModel, activeChat, isCodeGenerationEnabled, useRewriter, updateActiveChat, location, nanoAvailability, nanoSession]);
+
+  useEffect(() => {
+    if (pendingMessage && activeChat) {
+      doSendMessage(pendingMessage.query, pendingMessage.attachment);
+      setPendingMessage(null);
+    }
+  }, [pendingMessage, activeChat, doSendMessage]);
+
+  const handleSendMessage = useCallback(async (query: string, attachment?: Attachment) => {
+    if (!activeChatId || (activeChat && activeChat.messages.length === 0)) {
+        const newId = handleNewChat();
+        setActiveChatId(newId);
+        setPendingMessage({ query, attachment });
+    } else {
+      doSendMessage(query, attachment);
+    }
+  }, [activeChat, activeChatId, doSendMessage, handleNewChat]);
+
+  const handleQueryDocuments = async (currentMessages: ChatMessage[], rewrittenQuery?: string) => {
+    if (!activeChat) return;
+
+    addMessageToActiveChat({
+      role: MessageRole.MODEL,
+      content: '',
+      sources: [],
+      groundingChunks: [],
+      responseType: ResponseType.RAG,
+      modelId: selectedModel
+    });
+
+    const latestQuery = currentMessages[currentMessages.length - 1];
+    const queryForSearch = rewrittenQuery || latestQuery.content;
+
+
+    const { useCloud, usePreloaded, useGoogleSearch, useGoogleMaps } = activeChat.groundingOptions;
+
+    if (useGoogleSearch) {
+        const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
+        const responseStream = await streamAiResponse(currentMessages, [], modelToUse, { ...activeChat.groundingOptions, useGoogleSearch: true }, location, stopController.current.signal);
+        updateLastMessageInActiveChat(msg => ({ ...msg, responseType: ResponseType.GOOGLE_SEARCH }));
+        let allGroundingChunks: any[] = [];
+        for await (const chunk of responseStream) {
+            const chunkText = chunk.text;
+            updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
+            
+            const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (newChunks) {
+                allGroundingChunks.push(...newChunks);
+            }
+        }
+        const uniqueChunks = Array.from(new Map(allGroundingChunks.map(item => [item.web?.uri || item.maps?.uri, item])).values());
+        updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: uniqueChunks }));
+        return;
+    }
+
+    let elasticResults: ElasticResult[] = [];
+    if (useCloud || usePreloaded) {
+      elasticResults = await searchElastic(queryForSearch);
+    }
+
+    if (elasticResults.length === 0 && (useCloud || usePreloaded)) {
+        updateLastMessageInActiveChat(msg => ({ ...msg, content: "I couldn't find any relevant information from your data sources." }));
+        return;
+    }
+    
+    updateLastMessageInActiveChat(msg => ({ ...msg, sources: elasticResults }));
+
+    const modelToUse = MODELS.find(m => m.id === selectedModel)?.model || MODELS[0].model;
+    const responseStream = await streamAiResponse(currentMessages, elasticResults, modelToUse, activeChat.groundingOptions, location, stopController.current.signal);
+    
+    let allGroundingChunks: any[] = [];
+    for await (const chunk of responseStream) {
+      const chunkText = chunk.text;
+      updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
+      
+      const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (newChunks) {
+        allGroundingChunks.push(...newChunks);
+      }
+    }
+
+    const uniqueChunks = Array.from(new Map(allGroundingChunks.map(item => [item.web?.uri || item.maps?.uri, item])).values());
+    updateLastMessageInActiveChat(msg => ({ ...msg, groundingChunks: uniqueChunks }));
+  };
+  
+  const handleChitChat = async (currentMessages: ChatMessage[]) => {
+    addMessageToActiveChat({
+      role: MessageRole.MODEL,
+      content: '',
+      responseType: ResponseType.CHIT_CHAT,
+      modelId: selectedModel
+    });
+    const responseStream = await streamChitChatResponse(currentMessages, stopController.current.signal);
+    for await (const chunk of responseStream) {
+      const chunkText = chunk.text;
+      updateLastMessageInActiveChat(msg => ({ ...msg, content: msg.content + chunkText }));
+    }
+  };
+
+  const handleCodeGeneration = async (currentMessages: ChatMessage[]) => {
+    addMessageToActiveChat({
+      role: MessageRole.MODEL,
+      content: 'Thinking about the file...', 
+      responseType: ResponseType.CODE_GENERATION,
+      modelId: selectedModel
+    });
+
+    const latestQuery = currentMessages[currentMessages.length - 1].content;
+    const searchResults = await searchElastic(latestQuery);
+    
+    const editableSearchResults = searchResults.filter(r => {
+        const extension = r.source.file_name.split('.').pop()?.toLowerCase();
+        return extension && EDITABLE_EXTENSIONS.includes(extension);
+    });
+    
+    if (editableSearchResults.length === 0) {
+        updateLastMessageInActiveChat(msg => ({ ...msg, content: "I couldn't find any editable files relevant to your request." }));
+        return;
+    }
+    
+    const responseStream = await streamCodeGenerationResponse(currentMessages, editableSearchResults, stopController.current.signal);
+    let responseJsonText = '';
+    for await (const chunk of responseStream) {
+        responseJsonText += chunk.text;
+    }
+
+    let responseObject;
+    try {
+        responseObject = JSON.parse(responseJsonText);
+    } catch (parseError) {
+        console.warn("Direct JSON parsing failed, attempting regex extraction.", parseError, "Raw text:", responseJsonText);
+        const jsonMatch = responseJsonText.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch && jsonMatch[1]) {
+            try {
+                responseObject = JSON.parse(jsonMatch[1]);
+            } catch (regexParseError) {
+                console.error("Code generation parsing error even after regex:", regexParseError, "Extracted text:", jsonMatch[1]);
+                const content = `Sorry, the AI returned an invalid response. I couldn't parse the code suggestion.\n<details><summary>Details</summary>\`\`\`\n${jsonMatch[1]}\n\`\`\`</details>`;
+                updateLastMessageInActiveChat(msg => ({ ...msg, content }));
+                return;
+            }
+        } else {
+            const content = `Sorry, I received a malformed response from the AI and couldn't extract the code suggestion.\n<details><summary>Details</summary>\`\`\`\n${responseJsonText}\n\`\`\`</details>`;
+            updateLastMessageInActiveChat(msg => ({ ...msg, content }));
+            return;
+        }
+    }
+
+    try {
+        if (responseObject.error) throw new Error(responseObject.error);
+        
+        const fullPath = responseObject.filePath;
+        const file = allFiles.find(f => `${f.path}/${f.file_name}` === fullPath);
+        
+        if (!file) throw new Error(`Could not find file: ${fullPath}`);
+
+        const originalContent = await getFileContent(file);
+        if (originalContent === null) throw new Error(`Could not fetch original content for ${file.file_name}.`);
+
+        const suggestion: CodeSuggestion = {
+            file,
+            thought: responseObject.thought,
+            originalContent,
+            suggestedContent: responseObject.newContent,
+            status: 'pending',
+        };
+        updateLastMessageInActiveChat(msg => ({ ...msg, content: `I have a suggestion for 
+file:${file.file_name}".`, suggestion }));
+    } catch (e) {
+        console.error("Code suggestion processing error:", e);
+        const errorMessage = e instanceof Error ? e.message : "Could not generate edit.";
+        updateLastMessageInActiveChat(msg => ({ ...msg, content: errorMessage }));
+    }
+  };
   
   const handleConnectDataSource = useCallback(async (files: File[], dataSource: DataSource) => {
     setIsLoading(true);
@@ -445,10 +621,10 @@ return `Error: Could not load content for ${source.file_name}.`;
       messages: [],
       createdAt: Date.now(),
       dataSource,
-      dataset: [], // Dataset will be populated from Google Drive files
+      dataset: [],
       groundingOptions: {
         useCloud: false,
-        usePreloaded: true, // We will treat Google Drive files as preloaded
+        usePreloaded: true,
         useGoogleSearch: false,
         useGoogleMaps: false,
       },
@@ -498,7 +674,7 @@ return `Error: Could not load content for ${source.file_name}.`;
           const { success, newDataset } = updateFileContent(file, suggestedContent, activeChat.dataset);
           if (!success) {
             followUpMessage = { role: MessageRole.MODEL, content: `Sorry, I failed to apply the changes to 
-file:${file.file_name}". Could not find the file in the preloaded dataset.` };
+file:${file.file_name}".` };
           } else {
             updateActiveChat(c => ({...c, dataset: newDataset}));
             setEditedFiles(prev => new Map(prev).set(file!.id, { file: file!, originalContent: prev.get(file!.id)?.originalContent ?? originalContent, currentContent: suggestedContent }));
@@ -526,7 +702,28 @@ file:${file.file_name}".`, editedFile: file };
   const handleToggleCodeGeneration = useCallback(() => setIsCodeGenerationEnabled(prev => !prev), []);
   
   const handleGroundingOptionsChange = useCallback((options: GroundingOptions) => {
-      updateActiveChat(chat => ({ ...chat, groundingOptions: options }));
+    updateActiveChat(chat => {
+      const previousOptions = chat.groundingOptions;
+      let newOptions = { ...options };
+
+      if (newOptions.useGoogleSearch && !previousOptions.useGoogleSearch) {
+        previousGroundingOptions.current = {
+          useCloud: previousOptions.useCloud,
+          usePreloaded: previousOptions.usePreloaded,
+          useGoogleSearch: false,
+          useGoogleMaps: false,
+        };
+        newOptions.useCloud = false;
+        newOptions.usePreloaded = false;
+      } else if (!newOptions.useGoogleSearch && previousOptions.useGoogleSearch) {
+        if (previousGroundingOptions.current) {
+          newOptions.useCloud = previousGroundingOptions.current.useCloud;
+          newOptions.usePreloaded = previousGroundingOptions.current.usePreloaded;
+        }
+      }
+
+      return { ...chat, groundingOptions: newOptions };
+    });
   }, [updateActiveChat]);
 
   const handleViewDiff = useCallback((record: EditedFileRecord) => setDiffViewerRecord(record), []);
@@ -551,6 +748,11 @@ file:${file.file_name}".`, editedFile: file };
     });
   }, []);
 
+  const handleStopGeneration = useCallback(() => {
+    stopController.current.abort();
+    setIsLoading(false);
+  }, []);
+
   return (
     <div className={`flex flex-col h-screen font-sans transition-colors duration-300 bg-white dark:bg-slate-900 text-gray-800 dark:text-gray-200`}>
       <Header 
@@ -566,8 +768,8 @@ file:${file.file_name}".`, editedFile: file };
         <ChatHistory 
           chats={chats}
           activeChatId={activeChatId}
-          onSelectChat={setActiveChatId}
-          onNewChat={handleNewChat}
+          onSelectChat={(id) => setActiveChatId(id)}
+          onNewChat={() => setActiveChatId(null)}
           setChats={setChats}
           isOpen={isSidebarOpen}
           files={allFiles}
@@ -579,12 +781,15 @@ file:${file.file_name}".`, editedFile: file };
               <ChatInterface 
                 messages={messages} 
                 isLoading={isLoading} 
-                onSendMessage={handleSendMessage} 
+                onSendMessage={handleSendMessage}
+                onStopGeneration={handleStopGeneration}
                 onSelectSource={handleSelectFile}
                 onSuggestionAction={handleSuggestionAction}
                 onExportToSheets={handleExportToSheets}
                 selectedModel={selectedModel}
                 onModelChange={setSelectedModel}
+                selectedTeamModel={selectedTeamModel}
+                onTeamModelChange={setSelectedTeamModel}
                 activeDataSource={activeChat?.dataSource}
                 onConnectDataSource={handleToggleDataSourceModal}
                 isCodeGenerationEnabled={isCodeGenerationEnabled}
@@ -596,6 +801,8 @@ file:${file.file_name}".`, editedFile: file };
                 cloudSearchError={cloudSearchError}
                 nanoAvailability={nanoAvailability}
                 nanoDownloadProgress={nanoDownloadProgress}
+                useRewriter={useRewriter}
+                onToggleRewriter={() => setUseRewriter(!useRewriter)}
               />
            </ErrorBoundary>
         </main>

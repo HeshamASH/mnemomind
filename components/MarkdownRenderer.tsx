@@ -22,6 +22,19 @@ const CopyIcon: React.FC = () => (
     </svg>
 );
 
+const tableToMarkdown = (tableEl: HTMLTableElement): string => {
+    let markdown = '';
+    const headers = Array.from(tableEl.querySelectorAll('thead th')).map(th => th.textContent?.trim() || '');
+    markdown += `| ${headers.join(' | ')} |\n`;
+    markdown += `| ${headers.map(() => '---').join(' | ')} |\n`;
+
+    tableEl.querySelectorAll('tbody tr').forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent?.trim() || '');
+        markdown += `| ${cells.join(' | ')} |\n`;
+    });
+
+    return markdown;
+};
 
 interface CopyToSheetsButtonProps {
   tableData: (string | null)[][];
@@ -83,16 +96,39 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ text, onExportToShe
                 });
             });
 
-            // Highlight code blocks
-            container.querySelectorAll('pre code').forEach((block) => {
-                if (typeof hljs !== 'undefined') {
-                    hljs.highlightElement(block as HTMLElement);
+            // Highlight code blocks and add copy button
+            container.querySelectorAll('pre').forEach((preBlock) => {
+                const codeBlock = preBlock.querySelector('code');
+                if (codeBlock && typeof hljs !== 'undefined') {
+                    hljs.highlightElement(codeBlock as HTMLElement);
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'relative group';
+
+                    const button = document.createElement('button');
+                    button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg><span>Copy</span>`;
+                    button.className = 'absolute top-2 right-2 flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-md opacity-0 group-hover:opacity-100 transition-opacity';
+
+                    let timeoutId: number;
+                    button.addEventListener('click', () => {
+                        navigator.clipboard.writeText(codeBlock.innerText).then(() => {
+                            button.innerHTML = `<span>Copied!</span>`;
+                            clearTimeout(timeoutId);
+                            timeoutId = window.setTimeout(() => {
+                                button.innerHTML = `<svg xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg><span>Copy</span>`;
+                            }, 2000);
+                        });
+                    });
+
+                    preBlock.parentNode?.insertBefore(wrapper, preBlock);
+                    wrapper.appendChild(preBlock);
+                    wrapper.appendChild(button);
                 }
             });
 
             // Inject React component for tables and keep track of them for cleanup
             container.querySelectorAll('table').forEach(tableEl => {
-                tableEl.classList.add('min-w-full', 'divide-y', 'divide-slate-200', 'dark:divide-slate-700');
+                tableEl.classList.add('min-w-full', 'divide-y', 'divide-slate-200', 'dark:divide-slate-700', 'table-fixed');
                 tableEl.querySelector('thead')?.classList.add('bg-slate-50', 'dark:bg-slate-800');
                 tableEl.querySelectorAll('th').forEach(th => {
                     th.classList.add('px-6', 'py-3', 'text-left', 'text-xs', 'font-medium', 'text-slate-500', 'uppercase', 'tracking-wider');
@@ -101,33 +137,51 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ text, onExportToShe
                     tr.classList.add('odd:bg-white', 'odd:dark:bg-slate-900', 'even:bg-slate-50', 'even:dark:bg-slate-800');
                 });
                 tableEl.querySelectorAll('td').forEach(td => {
-                    td.classList.add('px-6', 'py-4', 'whitespace-nowrap', 'text-sm', 'text-slate-900', 'dark:text-slate-200');
+                    td.classList.add('px-6', 'py-4', 'whitespace-normal', 'break-words', 'text-sm', 'text-slate-900', 'dark:text-slate-200');
                 });
 
                 const wrapper = document.createElement('div');
-                wrapper.className = 'relative mt-4 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden';
+                wrapper.className = 'mt-4 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden';
 
-                const header = document.createElement('div');
-                header.className = 'flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded-t-lg';
-                const title = document.createElement('h4');
-                title.className = 'font-semibold text-sm';
-                title.textContent = 'Table';
-                header.appendChild(title);
-
-                const buttonContainer = document.createElement('div');
-                header.appendChild(buttonContainer);
-
-                wrapper.appendChild(header);
                 tableEl.parentNode?.insertBefore(wrapper, tableEl);
                 wrapper.appendChild(tableEl);
 
-                const tableData = Array.from(tableEl.querySelectorAll('tr')).map((row: Element) =>
-                    Array.from(row.querySelectorAll('th, td')).map((cell: Element) => cell.textContent)
-                );
+                const footer = document.createElement('div');
+                footer.className = 'flex items-center justify-end gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-b-lg border-t border-slate-200 dark:border-slate-700';
 
-                const root = createRoot(buttonContainer);
-                root.render(<CopyToSheetsButton tableData={tableData} onExportToSheets={onExportToSheets} />);
-                roots.push(root);
+                // Export to Sheets button
+                const exportButtonContainer = document.createElement('div');
+                exportButtonContainer.className = 'relative';
+                const exportButton = document.createElement('button');
+                exportButton.innerHTML = `<span>Export to Google Sheets</span>`;
+                exportButton.className = 'px-2 py-1 text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-200 dark:bg-slate-700 rounded-md cursor-not-allowed';
+                exportButton.disabled = true;
+                const comingSoonText = document.createElement('span');
+                comingSoonText.innerText = 'coming soon';
+                comingSoonText.className = 'absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 dark:text-slate-500';
+                exportButtonContainer.appendChild(exportButton);
+                exportButtonContainer.appendChild(comingSoonText);
+
+                // Copy table button
+                const copyButton = document.createElement('button');
+                copyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg><span>Copy table</span>`;
+                copyButton.className = 'flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600';
+
+                let timeoutId: number;
+                copyButton.addEventListener('click', () => {
+                    const markdownTable = tableToMarkdown(tableEl);
+                    navigator.clipboard.writeText(markdownTable).then(() => {
+                        copyButton.innerHTML = `<span>Copied!</span>`;
+                        clearTimeout(timeoutId);
+                        timeoutId = window.setTimeout(() => {
+                           copyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg><span>Copy table</span>`;
+                        }, 2000);
+                    });
+                });
+
+                footer.appendChild(exportButtonContainer);
+                footer.appendChild(copyButton);
+                wrapper.appendChild(footer);
             });
         }
 

@@ -40,6 +40,17 @@ const ToolsPopover: React.FC<ToolsPopoverProps> = ({
         onGroundingOptionsChange({ ...groundingOptions, [option]: !groundingOptions[option] });
     };
 
+    const getStatusText = () => {
+        const { useCloud, usePreloaded, useGoogleSearch } = groundingOptions;
+        const sources = [];
+        if (usePreloaded) sources.push('preload');
+        if (useCloud) sources.push('cloud files');
+        if (useGoogleSearch) sources.push('Google search');
+
+        if (sources.length === 0) return 'status: no grounding source selected';
+        return `status: using ${sources.join(' and ')}`;
+    };
+
     return (
         <div className="absolute bottom-full left-0 mb-2 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10 p-3 space-y-3">
             <div>
@@ -52,14 +63,17 @@ const ToolsPopover: React.FC<ToolsPopoverProps> = ({
             </div>
             <div className="border-t border-slate-200 dark:border-slate-700"></div>
             <div>
-                <h4 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Grounding Sources</h4>
+                <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Grounding Sources</h4>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{getStatusText()}</span>
+                </div>
                 
                 <div className="space-y-2">
                     {/* Cloud Search */}
                     <div>
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Cloud Search</label>
-                            <ToggleSwitch enabled={groundingOptions.useCloud} onChange={() => handleToggle('useCloud')} />
+                            <label className={`text-sm font-medium ${groundingOptions.useGoogleSearch ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>Cloud Search</label>
+                            <ToggleSwitch enabled={groundingOptions.useCloud} onChange={() => handleToggle('useCloud')} disabled={groundingOptions.useGoogleSearch} />
                         </div>
                         {cloudSearchError && (
                             <p className="text-xs text-red-600 dark:text-red-400 mt-1">Failed to fetch</p>
@@ -68,11 +82,11 @@ const ToolsPopover: React.FC<ToolsPopoverProps> = ({
                     {/* Preloaded Files */}
                     <div>
                         <div className="flex items-center justify-between">
-                            <label className={`text-sm font-medium ${hasPreloadedDataSource ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>Preloaded Files</label>
+                            <label className={`text-sm font-medium ${(hasPreloadedDataSource && !groundingOptions.useGoogleSearch) ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>Preloaded Files</label>
                             <ToggleSwitch 
                                 enabled={hasPreloadedDataSource && groundingOptions.usePreloaded} 
                                 onChange={() => handleToggle('usePreloaded')}
-                                disabled={!hasPreloadedDataSource}
+                                disabled={!hasPreloadedDataSource || groundingOptions.useGoogleSearch}
                             />
                         </div>
                         {!hasPreloadedDataSource && (

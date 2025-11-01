@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Source } from '../types';
+import { Source, DataSource } from '../types';
 import { FaFilePdf, FaFileCode, FaFileAlt, FaFileImage, FaPython, FaJs, FaHtml5, FaCss3, FaMarkdown } from 'react-icons/fa';
 
 // --- Icons ---
@@ -139,7 +139,7 @@ const TreeNodeComponent: React.FC<{ node: TreeNode; onSelectFile: (file: Source)
     const indentStyle = { paddingLeft: `${depth * 1}rem` };
 
     return (
-        <li>
+        <li data-testid="file-tree-item">
             <div
                 className="flex items-center p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer transition-colors text-sm"
                 style={indentStyle}
@@ -172,26 +172,50 @@ const TreeNodeComponent: React.FC<{ node: TreeNode; onSelectFile: (file: Source)
 // --- Main File Tree Component ---
 
 interface FileTreeProps {
-  files: Source[];
-  onSelectFile: (file: Source) => void;
-}
-
-const FileTree: React.FC<FileTreeProps> = ({ files, onSelectFile }) => {
-  const tree = useMemo(() => buildFileTree(files), [files]);
-
-  if (files.length === 0) {
-    return <p className="px-3 text-sm text-center text-slate-500">No files found in data source.</p>;
+    files: Source[];
+    onSelectFile: (file: Source) => void;
+    activeDataSource: DataSource | null;
   }
 
-  return (
-    <nav>
-        <ul>
-            {tree.map(node => (
-                <TreeNodeComponent key={node.path} node={node} onSelectFile={onSelectFile} depth={0} />
-            ))}
-        </ul>
-    </nav>
-  );
-};
+  const FileTree: React.FC<FileTreeProps> = ({ files, onSelectFile, activeDataSource }) => {
+    const { cloudFiles, localFiles } = useMemo(() => {
+      const cloudFiles = files.filter(file => !file.id.startsWith('custom-'));
+      const localFiles = files.filter(file => file.id.startsWith('custom-'));
+      return { cloudFiles, localFiles };
+    }, [files]);
+
+    const cloudTree = useMemo(() => buildFileTree(cloudFiles), [cloudFiles]);
+    const localTree = useMemo(() => buildFileTree(localFiles), [localFiles]);
+
+    const renderTree = (tree: TreeNode[], title: string) => (
+      <div>
+        <h3 className="px-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 my-2">{title}</h3>
+        <div className="px-1">
+            <nav>
+                <ul>
+                    {tree.map(node => (
+                        <TreeNodeComponent key={node.id} node={node} onSelectFile={onSelectFile} depth={0} />
+                    ))}
+                </ul>
+            </nav>
+        </div>
+      </div>
+    );
+
+    if (files.length === 0 && !activeDataSource) {
+      return null;
+    }
+
+    if (files.length === 0 && activeDataSource) {
+      return <p className="px-3 text-sm text-center text-slate-500">No files found in '{activeDataSource.name}'.</p>;
+    }
+
+    return (
+      <>
+        {localTree.length > 0 && renderTree(localTree, activeDataSource?.name || 'Local Files')}
+        {cloudTree.length > 0 && renderTree(cloudTree, 'Cloud Files')}
+      </>
+    );
+  };
 
 export default FileTree;

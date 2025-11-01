@@ -95,14 +95,15 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ chats, activeChatId, onSelect
                     </nav>
                 </div>
 
-                {activeDataSource && (
+                {(files.length > 0 || activeDataSource) && (
                     <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                        <h3 className="px-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">File Explorer</h3>
-                        <div className="px-1">
-                            <FileTree files={files} onSelectFile={onSelectFile} />
-                        </div>
+                      <FileTree
+                        files={files}
+                        onSelectFile={onSelectFile}
+                        activeDataSource={activeDataSource}
+                      />
                     </div>
-                )}
+                  )}
             </div>
         </aside>
     );

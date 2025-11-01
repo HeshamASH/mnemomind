@@ -137,7 +137,7 @@ const Message: React.FC<MessageProps> = ({ message, messageIndex, onSelectSource
                 <AttachmentPreview attachment={message.attachment} onRemove={() => {}} isReadOnly />
             </div>
           )}
-          <div>
+          <div data-testid="message-content">
              {message.content ? (
                 <MarkdownRenderer text={message.content} onExportToSheets={onExportToSheets} messageIndex={messageIndex} />
              ) : (

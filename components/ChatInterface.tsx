@@ -7,26 +7,58 @@ import ToolsPopover from './ToolsPopover';
 import { blobToBase64 } from '../utils/fileUtils';
 import ErrorBoundary from './ErrorBoundary';
 
+// --- Starter Prompts Data ---
+const starterPrompts = [
+    "Explain this project",
+    "Summarize the file 'api/main.py'",
+    "Write a unit test for...",
+    "Suggest an improvement for..."
+];
+
+const StarterPrompts: React.FC<{ onPromptSelect: (prompt: string) => void }> = ({ onPromptSelect }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto">
+        {starterPrompts.map((prompt, index) => (
+            <button
+                key={index}
+                onClick={() => onPromptSelect(prompt)}
+                className="text-left p-3.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl hover:bg-slate-200/80 dark:hover:bg-slate-800 transition-colors duration-200 border border-slate-200 dark:border-slate-700/60"
+            >
+                <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200">{prompt}</h3>
+            </button>
+        ))}
+    </div>
+);
+
+
 // --- Welcome Block Data ---
 const WelcomeBlock: React.FC<{
+  onPromptSelect: (prompt: string) => void;
   onConnectDataSource: () => void;
-}> = ({ onConnectDataSource }) => {
+}> = ({ onPromptSelect, onConnectDataSource }) => {
     return (
-        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <div className="max-w-xl">
+        <div className="flex flex-col items-center justify-center h-full p-4 md:p-8">
+            <div className="max-w-xl text-center">
                 <div className="mx-auto bg-gradient-to-r from-cyan-500 to-blue-500 p-3 rounded-xl inline-block mb-6">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-white">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" />
                     </svg>
                 </div>
-                <h2 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Welcome to MnemoMind</h2>
-                <p className="text-lg text-gray-500 dark:text-gray-400 mb-8">
-                   Connect a data source to begin asking questions about your code, documents, and more.
-                </p>
+                <h1 className="text-4xl font-bold text-slate-800 dark:text-slate-200">MnemoMind</h1>
+                <p className="mt-2 text-lg text-slate-600 dark:text-slate-400">Your intelligent code assistant.</p>
+            </div>
+
+            <div className="w-full mt-10">
+                <StarterPrompts onPromptSelect={onPromptSelect} />
+            </div>
+
+            <div className="mt-8 text-center">
                 <button
                     onClick={onConnectDataSource}
-                    className="bg-cyan-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-cyan-500 transition-colors duration-200"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300 bg-cyan-100/60 dark:bg-cyan-900/40 rounded-lg hover:bg-cyan-100 dark:hover:bg-cyan-900/60 transition-colors"
                 >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                        <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                    </svg>
                     Connect Data Source
                 </button>
             </div>
@@ -73,11 +105,14 @@ interface ChatInterfaceProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSendMessage: (query: string, attachment?: Attachment) => void;
+  onStopGeneration: () => void;
   onSelectSource: (source: Source) => void;
   onSuggestionAction: (messageIndex: number, action: 'accepted' | 'rejected') => void;
   onExportToSheets: (tableData: (string | null)[][]) => void;
   selectedModel: ModelId;
   onModelChange: (modelId: ModelId) => void;
+  selectedTeamModel: ModelId;
+  onTeamModelChange: (modelId: ModelId) => void;
   activeDataSource: DataSource | undefined | null;
   onConnectDataSource: () => void;
   isCodeGenerationEnabled: boolean;
@@ -89,9 +124,11 @@ interface ChatInterfaceProps {
   cloudSearchError: string | null;
   nanoAvailability: string;
   nanoDownloadProgress: number | null;
+  useRewriter: boolean;
+  onToggleRewriter: () => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, setApiError, cloudSearchError, nanoAvailability, nanoDownloadProgress }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSendMessage, onStopGeneration, onSelectSource, onSuggestionAction, onExportToSheets, selectedModel, onModelChange, selectedTeamModel, onTeamModelChange, activeDataSource, onConnectDataSource, isCodeGenerationEnabled, onToggleCodeGeneration, groundingOptions, onGroundingOptionsChange, apiError, setApiError, cloudSearchError, nanoAvailability, nanoDownloadProgress, useRewriter, onToggleRewriter }) => {
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -100,6 +137,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessageRef = messageRefs.current[messages.length - 1];
+      if (lastMessageRef) {
+        lastMessageRef.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toolsPopoverRef = useRef<HTMLDivElement>(null);
@@ -198,6 +247,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
     }
   };
   
+  const handlePromptSelect = (prompt: string) => {
+    onSendMessage(prompt);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -215,19 +268,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900">
       <div className="flex-1 overflow-y-auto p-6">
-        {messages.length === 0 && !activeDataSource ? (
-            <WelcomeBlock onConnectDataSource={onConnectDataSource} />
+        {messages.length === 0 ? (
+          <WelcomeBlock
+            onPromptSelect={handlePromptSelect}
+            onConnectDataSource={onConnectDataSource}
+          />
         ) : (
           <div className="space-y-6">
             {messages.map((msg, index) => (
-              <ErrorBoundary key={index}>
-                <Message message={msg} messageIndex={index} onSelectSource={onSelectSource} onSuggestionAction={(action) => onSuggestionAction(index, action)} onExportToSheets={onExportToSheets} />
-              </ErrorBoundary>
-            ))}
-             {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
+              <div key={index} ref={el => messageRefs.current[index] = el}>
                 <ErrorBoundary>
-                  <Message message={{role: MessageRole.MODEL, content: ''}} messageIndex={messages.length} onSelectSource={()=>{}} onSuggestionAction={()=>{}} onExportToSheets={onExportToSheets} />
+                  <Message
+                    message={msg}
+                    messageIndex={index}
+                    onSelectSource={onSelectSource}
+                    onSuggestionAction={(action) => onSuggestionAction(index, action)}
+                    onExportToSheets={onExportToSheets}
+                  />
                 </ErrorBoundary>
+              </div>
+            ))}
+            {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+              <ErrorBoundary>
+                <Message
+                  message={{ role: MessageRole.MODEL, content: '' }}
+                  messageIndex={messages.length}
+                  onSelectSource={() => {}}
+                  onSuggestionAction={() => {}}
+                  onExportToSheets={onExportToSheets}
+                />
+              </ErrorBoundary>
             )}
           </div>
         )}
@@ -274,7 +344,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
                   </div>
                 
                 <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-1" ref={toolsPopoverRef}>
+                    <div className="flex items-center gap-1">
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
@@ -291,7 +361,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
                             className="hidden"
                             accept="image/*,application/pdf"
                         />
-                        <div className="relative">
+                        <div className="relative" ref={toolsPopoverRef}>
                             <button
                                 type="button"
                                 onClick={() => setIsToolsPopoverOpen(prev => !prev)}
@@ -318,24 +388,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
                         <ModelSwitcher
                             selectedModel={selectedModel}
                             onModelChange={onModelChange}
+                            selectedTeamModel={selectedTeamModel}
+                            onTeamModelChange={onTeamModelChange}
                             disabled={isLoading}
                             nanoAvailability={nanoAvailability}
+                            nanoDownloadProgress={nanoDownloadProgress}
+                            useRewriter={useRewriter}
+                            onToggleRewriter={onToggleRewriter}
                         />
-                         {(input.trim() || attachment) ? (
+                        {isLoading ? (
+                            <button
+                                type="button"
+                                onClick={onStopGeneration}
+                                className="bg-cyan-600 text-white rounded-lg p-2 hover:bg-cyan-500 transition-colors"
+                                aria-label="Stop generation"
+                            >
+                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                                    <path d="M5.25 3A2.25 2.25 0 0 0 3 5.25v9.5A2.25 2.25 0 0 0 5.25 17h9.5A2.25 2.25 0 0 0 17 14.75v-9.5A2.25 2.25 0 0 0 14.75 3h-9.5Z" />
+                                </svg>
+                            </button>
+                        ) : (input.trim() || attachment) ? (
                             <button
                                 type="submit"
-                                disabled={isLoading}
-                                className="bg-cyan-600 text-white rounded-lg p-2 hover:bg-cyan-500 disabled:bg-slate-400 dark:disabled:bg-slate-700 disabled:text-slate-600 dark:disabled:text-slate-400 transition-colors"
+                                className="bg-cyan-600 text-white rounded-lg p-2 hover:bg-cyan-500 transition-colors"
                                 aria-label="Send message"
                             >
                                 <SendIcon />
                             </button>
-                         ) : recognitionRef.current && (
+                        ) : recognitionRef.current && (
                             <button
                                 type="button"
                                 onClick={handleToggleListening}
-                                disabled={isLoading}
-                                className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg p-2 disabled:opacity-50 transition-colors"
+                                className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg p-2 transition-colors"
                                 aria-label="Use microphone"
                             >
                                 <MicIcon className={isListening ? 'text-cyan-500 animate-pulse' : ''} />
@@ -345,6 +429,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, isLoading, onSe
                 </div>
                 </form>
             </div>
+            <p className="text-xs text-center text-slate-400 dark:text-slate-500 mt-3">
+                MnemoMind can make mistakes. Consider checking important information.
+            </p>
         </div>
       </div>
     </div>

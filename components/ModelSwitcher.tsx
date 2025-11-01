@@ -13,11 +13,16 @@ const ChevronDownIcon: React.FC = () => (
 interface ModelSwitcherProps {
     selectedModel: ModelId;
     onModelChange: (modelId: ModelId) => void;
+    selectedTeamModel: ModelId;
+    onTeamModelChange: (modelId: ModelId) => void;
     disabled?: boolean;
     nanoAvailability: string;
+    nanoDownloadProgress: number | null;
+    useRewriter: boolean;
+    onToggleRewriter: () => void;
 }
 
-const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelChange, disabled, nanoAvailability }) => {
+const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelChange, selectedTeamModel, onTeamModelChange, disabled, nanoAvailability, nanoDownloadProgress, useRewriter, onToggleRewriter }) => {
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement>(null);
     const selected = MODELS.find(m => m.id === selectedModel);
@@ -48,11 +53,15 @@ const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ selectedModel, onModelCha
             </button>
             {isPopoverOpen && (
                 <ModelSwitcherPopover
-                    models={MODELS}
                     selectedModel={selectedModel}
                     onModelChange={onModelChange}
+                    selectedTeamModel={selectedTeamModel}
+                    onTeamModelChange={onTeamModelChange}
                     onClose={() => setIsPopoverOpen(false)}
                     nanoAvailability={nanoAvailability}
+                    nanoDownloadProgress={nanoDownloadProgress}
+                    useRewriter={useRewriter}
+                    onToggleRewriter={onToggleRewriter}
                 />
             )}
         </div>
